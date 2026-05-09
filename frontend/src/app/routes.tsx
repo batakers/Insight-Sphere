@@ -1,0 +1,103 @@
+import { 
+  LayoutDashboard, 
+  BrainCircuit, 
+  Lightbulb, 
+  Package, 
+  BarChart3, 
+  Settings,
+  Receipt,
+  ShoppingCart,
+  Wallet,
+  ArrowLeftRight,
+  Users,
+  FlaskConical,
+} from "lucide-react";
+
+export const routes = [
+  {
+    id: "dashboard",
+    path: "/",
+    labelKey: "nav.dashboard",
+    icon: LayoutDashboard,
+    allowedRoles: ["admin", "owner", "inventory_manager", "cashier"],
+  },
+  {
+    id: "kasir",
+    path: "/kasir",
+    labelKey: "nav.kasir",
+    icon: ShoppingCart,
+    allowedRoles: ["admin", "owner", "cashier"],
+  },
+  {
+    id: "predictions",
+    path: "/prediksi-stok",
+    labelKey: "nav.predictions",
+    icon: BrainCircuit,
+    allowedRoles: ["admin", "owner", "inventory_manager"],
+  },
+  {
+    id: "xai",
+    path: "/penjelasan-ai",
+    labelKey: "nav.xai",
+    icon: Lightbulb,
+    allowedRoles: ["admin", "owner"],
+  },
+  {
+    id: "inventory",
+    path: "/inventaris",
+    labelKey: "nav.inventory",
+    icon: Package,
+    allowedRoles: ["admin", "owner", "inventory_manager"],
+  },
+  {
+    id: "transactions",
+    path: "/riwayat-transaksi",
+    labelKey: "nav.transactions",
+    icon: Receipt,
+    allowedRoles: ["admin", "owner"],
+  },
+  {
+    id: "reports",
+    path: "/laporan",
+    labelKey: "nav.reports",
+    icon: BarChart3,
+    allowedRoles: ["admin", "owner", "inventory_manager"],
+  },
+  {
+    id: "mlops",
+    path: "/mlops",
+    labelKey: "nav.mlops",
+    icon: FlaskConical,
+    allowedRoles: ["admin"],
+  },
+  {
+    id: "cash_management",
+    path: "/manajemen-kas",
+    labelKey: "nav.cash_management",
+    icon: Wallet,
+    allowedRoles: ["admin", "owner"],
+  },
+  {
+    id: "stock_movement",
+    path: "/pergerakan-stok",
+    labelKey: "nav.stock_movement",
+    icon: ArrowLeftRight,
+    allowedRoles: ["admin", "owner", "inventory_manager"],
+  },
+  {
+    id: "user_management",
+    path: "/manajemen-pengguna",
+    labelKey: "nav.user_management",
+    icon: Users,
+    allowedRoles: ["admin"],
+  },
+  {
+    id: "settings",
+    path: "/pengaturan",
+    labelKey: "nav.settings",
+    icon: Settings,
+    allowedRoles: ["admin", "owner", "inventory_manager", "cashier"],
+  },
+] as const;
+
+export type RouteId = typeof routes[number]["id"];

@@ -1,0 +1,8 @@
+/* Fonts configuration placeholder */
+/* Using next/font/google for optimized font loading in layout.tsx */
+@layer base {
+  :root {
+    --font-inter: "Inter", sans-serif;
+    --font-fira-code: "Fira Code", monospace;
+  }
+}

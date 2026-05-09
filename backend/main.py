@@ -1,0 +1,157 @@
+import logging
+import os
+from sqlalchemy import text
+from fastapi import FastAPI, Depends, BackgroundTasks
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from core.database import engine, Base, get_db
+
+# Import SEMUA domain models agar SQLAlchemy mendaftarkan tabel-tabelnya
+from domains.dataset import models as _dataset
+from domains.observability import models as _observability
+from domains.identity import models as _identity
+from domains.sales import models as _sales
+from domains.finance import models as _finance
+from domains.intelligence import models as _intelligence
+from domains.inventory import models as _inventory
+from domains.notification import models as _notification
+from domains.reporting import models as _reporting
+
+# 1. Konfigurasi Sistem Logging
+is_vercel = os.getenv("VERCEL") == "1"
+
+handlers = [logging.StreamHandler()]
+if not is_vercel:
+    try:
+        handlers.append(logging.FileHandler("system_api.log"))
+    except Exception:
+        pass
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=handlers
+)
+logger = logging.getLogger("SystemHealth")
+
+
+# ==========================================
+# Background Tasks (Celery & Worker)
+# ==========================================
+from domains.intelligence.tasks import ml_daily_batch_task
+
+def trigger_ml_batch_task():
+    """
+    Trigger task ML di Celery Worker alih-alih di proses utama.
+    """
+    try:
+        # Mengirimkan pekerjaan ke Redis queue (Non-blocking)
+        ml_daily_batch_task.delay()
+        logger.info("[Scheduler] ML Batch Task has been queued to Celery.")
+    except Exception as e:
+        logger.error(f"[Scheduler Error] Failed to queue ML task: {e}")
+
+# 2. Konfigurasi Lifespan (Startup/Shutdown Event Modern)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Jika di Vercel, kita matikan Scheduler internal.
+    # Tanggung jawab scheduler akan pindah ke Hugging Face Worker (Always-on).
+    if is_vercel:
+        logger.info("[Lifespan] Vercel environment detected. Internal Scheduler disabled.")
+        yield
+        return
+
+    scheduler = AsyncIOScheduler()
+    
+    # Environment Variable Switching (Dev vs Prod)
+    dev_interval_sec = os.getenv("ANALYTICS_INTERVAL_SECONDS")
+    
+    if dev_interval_sec:
+        # Development Mode
+        scheduler.add_job(
+            trigger_ml_batch_task, 
+            'interval', 
+            seconds=int(dev_interval_sec), 
+            misfire_grace_time=3600, 
+            id='mlops_batch_dev'
+        )
+        logger.info(f"[Job Scheduler] DEV MODE: MLOps Analytics terjadwal setiap {dev_interval_sec} detik.")
+    else:
+        # Production Mode
+        scheduler.add_job(
+            trigger_ml_batch_task, 
+            'cron', 
+            hour=0, 
+            minute=0, 
+            misfire_grace_time=3600, 
+            id='mlops_batch_prod'
+        )
+        logger.info("[Job Scheduler] PROD MODE: MLOps Analytics terjadwal secara kronologis setiap pukul 00:00 (Tengah Malam).")
+        
+    scheduler.start()
+    yield
+    scheduler.shutdown()
+    logger.info("[Job Scheduler] Saraf memori Cron dibersihkan secara elegan (Graceful Shutdown).")
+
+# 3. Inisialisasi Aplikasi Utama
+app = FastAPI(
+    title="InsightSphere API",
+    description="ERP Backend berbasis Domain-Driven Design dengan XAI & MLOps Pipeline",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+@app.get("/health", tags=["Observability"])
+def health_check(db = Depends(get_db)):
+    """ Endpoint Observabilitas untuk Container Orchestration (Docker/Kubernetes). """
+    try:
+        db.execute(text("SELECT 1"))
+        logger.info("Health check berhasil: API dan Database terkoneksi.")
+        return {"api": "healthy", "database": "connected"}
+    except Exception as e:
+        logger.error(f"Health check gagal! Database terputus. Reason: {e}")
+        return {"api": "healthy", "database": "disconnected", "error": str(e)}
+
+# 4. Registrasi Router dari setiap Domain
+from domains.sales.router import router as sales_router
+from domains.finance.router import router as finance_router
+from domains.intelligence.router import router as intelligence_router
+from domains.inventory.router import router as inventory_router
+from domains.identity.router import router as identity_router
+from domains.dataset.router import router as dataset_router
+from domains.notification.routes import router as notification_router
+from domains.reporting.router import router as reporting_router
+
+app.include_router(sales_router)
+app.include_router(finance_router)
+app.include_router(intelligence_router, prefix="/api/analytics", tags=["Intelligence"])
+app.include_router(inventory_router)
+app.include_router(identity_router)
+app.include_router(dataset_router)
+app.include_router(notification_router)
+app.include_router(reporting_router)
+
+@app.get("/")
+def read_root():
+    return {"message": "InsightSphere API v2.0 — Domain-Driven Design. Welcome!"}
+
+@app.post("/api/ml/run-daily-batch", tags=["MLOps"])
+def run_daily_batch(background_tasks: BackgroundTasks):
+    """
+    Trigger kalkulasi AI Manual via HTTP.
+    Berjalan via BackgroundTasks untuk mengakomodir jika admin ingin memaksa eksekusi.
+    """
+    background_tasks.add_task(ml_daily_batch_task)
+    return {"status": "Batch ML process started in background via API Trigger"}
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={'detail': str(exc), 'traceback': traceback.format_exc()}
+    )
+
