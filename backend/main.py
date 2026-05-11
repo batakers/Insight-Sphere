@@ -122,6 +122,7 @@ from domains.identity.router import router as identity_router
 from domains.dataset.router import router as dataset_router
 from domains.notification.routes import router as notification_router
 from domains.reporting.router import router as reporting_router
+from domains.dashboard.router import router as dashboard_router
 
 app.include_router(sales_router)
 app.include_router(finance_router)
@@ -131,6 +132,7 @@ app.include_router(identity_router)
 app.include_router(dataset_router)
 app.include_router(notification_router)
 app.include_router(reporting_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def read_root():
@@ -154,4 +156,3 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={'detail': str(exc), 'traceback': traceback.format_exc()}
     )
-

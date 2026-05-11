@@ -7,7 +7,8 @@ import { PredictionTable } from "../PredictionTable";
 import { TopProductsChart } from "../TopProductsChart";
 import { LowStockAlert } from "../LowStockAlert";
 import { ErrorBoundary } from "../ErrorBoundary";
-import { RefreshCcw, Sparkles, Zap, ShieldCheck, ChevronRight, TrendingUp, DollarSign, ShoppingCart, BarChart3, Boxes, MapPin, Building2, ArrowUpRight, AlertTriangle } from "lucide-react";
+import { RefreshCcw, Sparkles, Zap, ShieldCheck, ChevronRight, TrendingUp, MapPin, Building2, ArrowUpRight, AlertTriangle, Banknote, ShoppingCart } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTranslation } from "@/app/i18n";
 import { cn } from "@/app/lib/utils";
@@ -16,13 +17,17 @@ import { C } from "@/app/lib/colors";
 import { R, R_COMPONENT } from "@/app/lib/radii";
 import { E, E_COMPONENT } from "@/app/lib/elevation";
 import { toast } from "sonner";
-import { useState, useMemo } from "react";
-import { formatRupiah } from "@/app/lib/format";
+import { useEffect, useState, useMemo } from "react";
 import { GAP, STACK } from "@/app/lib/spacing";
 import { TABLE } from "@/app/lib/data";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
+import { A11Y } from "@/app/lib/a11y";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
 import { ChartSkeleton } from "../Skeletons";
+import { formatRupiah } from "@/app/lib/format";
+import { fetchDashboardOverview, type DashboardOverviewResponse } from "@/app/lib/dashboard-client";
+import { fetchModelMetrics } from "@/app/lib/intelligence-client";
 
 // ForecastChart uses Recharts (heavy). Lazy-load so that "cashier" role
 // — who never renders it — doesn't pay the cost in their initial bundle.
@@ -34,140 +39,220 @@ const ForecastChart = dynamic(
   }
 );
 
-// --- Format helper (compact Rupiah for static mock values) ---
-const fmt = (n: number) => formatRupiah(n, { compact: true });
-
-// --- Mock Business KPIs by period ---
-const PERIOD_KPIS: Record<string, { key: string; value: string; change: string; up: boolean; icon: typeof DollarSign; color: string }[]> = {
-  day:   [
-    { key: "dash.kpi.revenue",         value: fmt(3_200_000),  change: "+8.1%",  up: true,  icon: DollarSign,  color: "indigo" },
-    { key: "dash.kpi.transactions",    value: "38",          change: "+5.3%",  up: true,  icon: ShoppingCart, color: "emerald" },
-    { key: "dash.kpi.avg_transaction", value: fmt(84_200),     change: "+2.8%",  up: true,  icon: BarChart3,   color: "indigo" },
-    { key: "dash.kpi.items_sold",      value: "312",         change: "-1.1%",  up: false, icon: Boxes,       color: "amber" },
-  ],
-  week:  [
-    { key: "dash.kpi.revenue",         value: fmt(12_800_000), change: "+18.3%", up: true,  icon: DollarSign,  color: "indigo" },
-    { key: "dash.kpi.transactions",    value: "142",         change: "+12.1%", up: true,  icon: ShoppingCart, color: "emerald" },
-    { key: "dash.kpi.avg_transaction", value: fmt(90_100),     change: "+5.6%",  up: true,  icon: BarChart3,   color: "indigo" },
-    { key: "dash.kpi.items_sold",      value: "1,247",       change: "-3.2%",  up: false, icon: Boxes,       color: "amber" },
-  ],
-  month: [
-    { key: "dash.kpi.revenue",         value: fmt(48_500_000), change: "+22.7%", up: true,  icon: DollarSign,  color: "indigo" },
-    { key: "dash.kpi.transactions",    value: "574",         change: "+15.4%", up: true,  icon: ShoppingCart, color: "emerald" },
-    { key: "dash.kpi.avg_transaction", value: fmt(84_500),     change: "+6.2%",  up: true,  icon: BarChart3,   color: "indigo" },
-    { key: "dash.kpi.items_sold",      value: "4,980",       change: "+4.1%",  up: true,  icon: Boxes,       color: "amber" },
-  ],
-};
-const PERIODS = [ { key: "day", label: "Hari Ini" }, { key: "week", label: "Pekan Ini" }, { key: "month", label: "Bulan Ini" } ] as const;
+const PERIODS = [
+  { key: "day", labelKey: "dash.period.daily" },
+  { key: "week", labelKey: "dash.period.weekly" },
+  { key: "month", labelKey: "dash.period.monthly" },
+] as const;
 type KpiPeriod = typeof PERIODS[number]["key"];
 
-// --- Branch data ---
-const BRANCHES = [
-  { id: "all",  name: "Semua Cabang",       short: "ALL" },
-  { id: "hq",   name: "HQ — Jakarta Pusat", short: "HQ"  },
-  { id: "cb1",  name: "Cabang Tangerang",    short: "TNG" },
-  { id: "cb2",  name: "Cabang Bekasi",       short: "BKS" },
-] as const;
-type BranchId = typeof BRANCHES[number]["id"];
+type BranchId = string;
 
-const BRANCH_PERIOD_KPIS: Record<BranchId, typeof PERIOD_KPIS> = {
-  all: PERIOD_KPIS,
-  hq: {
-    day: [
-      { key: "dash.kpi.revenue",         value: fmt(1_300_000),  change: "+7.2%",  up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "16",          change: "+5.0%",  up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(81_300),     change: "+2.1%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "131",         change: "-0.8%",  up: false, icon: Boxes,        color: "amber"   },
-    ],
-    week: [
-      { key: "dash.kpi.revenue",         value: fmt(5_400_000),  change: "+17.5%", up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "60",          change: "+11.0%", up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(90_000),     change: "+5.1%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "524",         change: "-2.5%",  up: false, icon: Boxes,        color: "amber"   },
-    ],
-    month: [
-      { key: "dash.kpi.revenue",         value: fmt(20_400_000), change: "+21.3%", up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "241",         change: "+14.0%", up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(84_700),     change: "+5.8%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "2,092",       change: "+3.9%",  up: true,  icon: Boxes,        color: "amber"   },
-    ],
-  },
-  cb1: {
-    day: [
-      { key: "dash.kpi.revenue",         value: fmt(1_100_000),  change: "+9.5%",  up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "13",          change: "+6.2%",  up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(84_600),     change: "+3.1%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "109",         change: "-1.5%",  up: false, icon: Boxes,        color: "amber"   },
-    ],
-    week: [
-      { key: "dash.kpi.revenue",         value: fmt(4_500_000),  change: "+19.2%", up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "50",          change: "+13.0%", up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(90_000),     change: "+5.8%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "437",         change: "-3.8%",  up: false, icon: Boxes,        color: "amber"   },
-    ],
-    month: [
-      { key: "dash.kpi.revenue",         value: fmt(17_000_000), change: "+23.1%", up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "201",         change: "+16.2%", up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(84_600),     change: "+6.6%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "1,743",       change: "+4.5%",  up: true,  icon: Boxes,        color: "amber"   },
-    ],
-  },
-  cb2: {
-    day: [
-      { key: "dash.kpi.revenue",         value: fmt(800_000),    change: "+7.8%",  up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "9",           change: "+4.0%",  up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(88_900),     change: "+3.7%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "72",          change: "-0.9%",  up: false, icon: Boxes,        color: "amber"   },
-    ],
-    week: [
-      { key: "dash.kpi.revenue",         value: fmt(2_900_000),  change: "+16.1%", up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "32",          change: "+10.5%", up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(90_600),     change: "+5.3%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "286",         change: "-3.1%",  up: false, icon: Boxes,        color: "amber"   },
-    ],
-    month: [
-      { key: "dash.kpi.revenue",         value: fmt(11_100_000), change: "+20.8%", up: true,  icon: DollarSign,   color: "indigo"  },
-      { key: "dash.kpi.transactions",    value: "132",         change: "+15.2%", up: true,  icon: ShoppingCart, color: "emerald" },
-      { key: "dash.kpi.avg_transaction", value: fmt(84_100),     change: "+4.8%",  up: true,  icon: BarChart3,    color: "indigo"  },
-      { key: "dash.kpi.items_sold",      value: "1,145",       change: "+3.8%",  up: true,  icon: Boxes,        color: "amber"   },
-    ],
+type DashboardKpi = {
+  key: string;
+  value: string;
+  change: string;
+  up: boolean;
+  icon: LucideIcon;
+  color: string;
+};
+
+type Branch = {
+  id: BranchId;
+  name: string;
+  short: string;
+};
+
+type BranchComparison = {
+  id: BranchId;
+  name: string;
+  location: string;
+  omzet: Record<KpiPeriod, string>;
+  txn: Record<KpiPeriod, number>;
+  trend: Record<KpiPeriod, string>;
+  up: boolean;
+  criticalStock: number;
+  staffCount: number;
+};
+
+type DashboardData = {
+  branches: Branch[];
+  branchPeriodKpis: Record<BranchId, Record<KpiPeriod, DashboardKpi[]>>;
+  branchComparison: BranchComparison[];
+  precision: {
+    value: string;
+    grade: string;
+  };
+};
+
+const EMPTY_DASHBOARD: DashboardData = {
+  branches: [],
+  branchPeriodKpis: {},
+  branchComparison: [],
+  precision: {
+    value: "-",
+    grade: "-",
   },
 };
 
-const BRANCH_COMPARISON = [
-  {
-    id: "hq",  name: "HQ — Jakarta Pusat", location: "Gambir, Jakarta Pusat",
-    omzet: { day: fmt(1_300_000),  week: fmt(5_400_000),  month: fmt(20_400_000) },
-    txn:   { day: 16,            week: 60,             month: 241           },
-    trend: { day: "+7.2%",      week: "+17.5%",       month: "+21.3%"      },
-    up: true, criticalStock: 2, staffCount: 8,
-  },
-  {
-    id: "cb1", name: "Cabang Tangerang",    location: "BSD City, Tangerang Selatan",
-    omzet: { day: fmt(1_100_000),  week: fmt(4_500_000),  month: fmt(17_000_000) },
-    txn:   { day: 13,            week: 50,             month: 201           },
-    trend: { day: "+9.5%",      week: "+19.2%",       month: "+23.1%"      },
-    up: true, criticalStock: 5, staffCount: 6,
-  },
-  {
-    id: "cb2", name: "Cabang Bekasi",       location: "Kalimalang, Bekasi Barat",
-    omzet: { day: fmt(800_000),    week: fmt(2_900_000),  month: fmt(11_100_000) },
-    txn:   { day: 9,             week: 32,             month: 132           },
-    trend: { day: "+7.8%",      week: "+16.1%",       month: "+20.8%"      },
-    up: true, criticalStock: 3, staffCount: 5,
-  },
-];
+const emptyPeriodKpis = (): Record<KpiPeriod, DashboardKpi[]> => ({
+  day: [],
+  week: [],
+  month: [],
+});
+
+const toPeriodKey = (period: string): KpiPeriod => {
+  if (period === "today" || period === "day") return "day";
+  if (period === "month") return "month";
+  return "week";
+};
+
+const makeShortBranchName = (name: string, fallback: string) => {
+  const short = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+  return short || fallback.slice(0, 3).toUpperCase();
+};
+
+const buildKpis = (revenue: number, transactions: number, itemsSold = 0): DashboardKpi[] => {
+  const averageTransaction = transactions > 0 ? revenue / transactions : 0;
+  return [
+    { key: "dash.kpi.revenue", value: formatRupiah(revenue, { compact: true }), change: "0%", up: true, icon: Banknote, color: "indigo" },
+    { key: "dash.kpi.transactions", value: transactions.toLocaleString("id-ID"), change: "0%", up: true, icon: ShoppingCart, color: "emerald" },
+    { key: "dash.kpi.avg_transaction", value: formatRupiah(averageTransaction, { compact: true }), change: "0%", up: true, icon: TrendingUp, color: "indigo" },
+    { key: "dash.kpi.items_sold", value: itemsSold.toLocaleString("id-ID"), change: "0%", up: true, icon: Building2, color: "amber" },
+  ];
+};
+
+const toDashboardData = (overview: DashboardOverviewResponse): DashboardData => {
+  const allKpis = emptyPeriodKpis();
+  for (const period of overview.period_kpis) {
+    allKpis[toPeriodKey(period.period)] = buildKpis(period.revenue, period.transactions);
+  }
+  allKpis.day = buildKpis(overview.today.revenue, overview.today.transactions, overview.today.items_sold);
+
+  const branchRows: BranchComparison[] = overview.branch_comparison.map((branch) => {
+    const id = String(branch.store_nbr);
+    return {
+      id,
+      name: branch.name,
+      location: `Store ${branch.store_nbr}`,
+      omzet: {
+        day: formatRupiah(branch.revenue, { compact: true }),
+        week: formatRupiah(branch.revenue, { compact: true }),
+        month: formatRupiah(branch.revenue, { compact: true }),
+      },
+      txn: {
+        day: branch.transactions,
+        week: branch.transactions,
+        month: branch.transactions,
+      },
+      trend: { day: "0%", week: "0%", month: "0%" },
+      up: true,
+      criticalStock: overview.inventory.critical + overview.inventory.out_of_stock,
+      staffCount: 0,
+    };
+  });
+
+  const branchPeriodKpis: Record<BranchId, Record<KpiPeriod, DashboardKpi[]>> = {
+    all: allKpis,
+  };
+  for (const branch of overview.branch_comparison) {
+    const id = String(branch.store_nbr);
+    branchPeriodKpis[id] = {
+      day: buildKpis(branch.revenue, branch.transactions),
+      week: buildKpis(branch.revenue, branch.transactions),
+      month: buildKpis(branch.revenue, branch.transactions),
+    };
+  }
+
+  const modelAccuracy = overview.model.accuracy;
+  return {
+    branches: [
+      { id: "all", name: "Semua Cabang", short: "ALL" },
+      ...overview.branch_comparison.map((branch) => {
+        const id = String(branch.store_nbr);
+        return {
+          id,
+          name: branch.name,
+          short: makeShortBranchName(branch.name, id),
+        };
+      }),
+    ],
+    branchPeriodKpis,
+    branchComparison: branchRows,
+    precision: {
+      value: modelAccuracy == null ? "-" : `${modelAccuracy.toFixed(1)}%`,
+      grade: modelAccuracy == null ? "-" : modelAccuracy >= 90 ? "Grade A+" : modelAccuracy >= 80 ? "Grade A" : "Grade B",
+    },
+  };
+};
 
 export function DashboardPage() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("week");
   const [selectedBranch, setSelectedBranch] = useState<BranchId>("all");
+  const [dashboardData, setDashboardData] = useState<DashboardData>(EMPTY_DASHBOARD);
+  const [liveToday, setLiveToday] = useState<{ date: string; totalRevenue: number; totalTransactions: number } | null>(null);
+  const [livePrecision, setLivePrecision] = useState<DashboardData["precision"] | null>(null);
+  const { branches, branchPeriodKpis, branchComparison, precision } = dashboardData;
   const BUSINESS_KPIS = useMemo(
-    () => BRANCH_PERIOD_KPIS[selectedBranch][kpiPeriod],
-    [selectedBranch, kpiPeriod]
+    () => branchPeriodKpis[selectedBranch]?.[kpiPeriod] ?? [],
+    [branchPeriodKpis, selectedBranch, kpiPeriod]
   );
+  const ALL_PERIOD_KPIS = branchPeriodKpis.all?.[kpiPeriod] ?? [];
+
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/dashboard").then(({ DEMO_DASHBOARD }) => {
+      if (!cancelled) setDashboardData(DEMO_DASHBOARD);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isDemoDataEnabled()) return;
+    let cancelled = false;
+    void fetchDashboardOverview({ store_nbr: user?.storeNbr ?? undefined })
+      .then((overview) => {
+        if (cancelled) return;
+        const nextDashboard = toDashboardData(overview);
+        setDashboardData(nextDashboard);
+        setLiveToday({
+          date: new Date().toISOString().slice(0, 10),
+          totalRevenue: overview.today.revenue,
+          totalTransactions: overview.today.transactions,
+        });
+        if (overview.model.accuracy != null) {
+          setLivePrecision(nextDashboard.precision);
+        }
+        setSelectedBranch((current) => (nextDashboard.branchPeriodKpis[current] ? current : "all"));
+      })
+      .catch(() => {});
+    void fetchModelMetrics({ store_nbr: user?.storeNbr ?? undefined })
+      .then((metrics) => {
+        const wape = metrics.find((m) => m.metric_name.toLowerCase() === "wape");
+        if (wape) {
+          const acc = Math.max(0, 100 - wape.metric_value);
+          setLivePrecision({ value: `${acc.toFixed(1)}%`, grade: acc >= 90 ? "Grade A+" : acc >= 80 ? "Grade A" : "Grade B" });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.storeNbr]);
 
   const headerKey = useMemo(() => {
     if (role === "owner") return "dash.header.owner";
@@ -183,8 +268,8 @@ export function DashboardPage() {
 
   const canSeeFinancials = useMemo(() => role === "owner" || role === "admin", [role]);
   const canSeeStock      = useMemo(() => role !== "cashier", [role]);
-  const totalCriticalStock = useMemo(() => BRANCH_COMPARISON.reduce((s, b) => s + b.criticalStock, 0), []);
-  const totalStaff         = useMemo(() => BRANCH_COMPARISON.reduce((s, b) => s + b.staffCount, 0), []);
+  const totalCriticalStock = useMemo(() => branchComparison.reduce((s, b) => s + b.criticalStock, 0), [branchComparison]);
+  const totalStaff         = useMemo(() => branchComparison.reduce((s, b) => s + b.staffCount, 0), [branchComparison]);
 
   return (
     <div className="space-y-6 pb-6">
@@ -194,7 +279,7 @@ export function DashboardPage() {
           <div className="flex items-center gap-3">
               <div className={cn(T.micro, R.sm, E.glowPrimary, "px-2 py-0.5 bg-indigo-600 text-white flex items-center gap-1.5")}>
                 <Zap className="size-3" />
-                Live AI Engine
+                {t("dash.ai_engine_live")}
               </div>
               <span className={cn(T.caption, "text-slate-400")}>•</span>
               <span className={cn(T.caption, "text-slate-400 flex items-center gap-1.5")}>
@@ -218,28 +303,52 @@ export function DashboardPage() {
              <div>
                 <p className={cn(T.label, "text-slate-500 dark:text-slate-400 leading-none mb-1")}>{t("dash.precision")}</p>
                 <div className="flex items-baseline gap-1.5">
-                   <span className={cn(T.h3, "font-bold text-slate-900 dark:text-slate-100 font-data")}>94.3%</span>
-                   <span className={cn(T.caption, C.success.icon, "italic")}>A+ Grade</span>
+                   <span className={cn(T.h3, "font-bold text-slate-900 dark:text-slate-100 font-data")}>{(livePrecision ?? precision).value}</span>
+                   <span className={cn(T.caption, C.success.icon, "italic")}>{(livePrecision ?? precision).grade}</span>
                 </div>
              </div>
           </div>
         )}
       </div>
 
+      {/* Today's Live Snapshot — real API, non-demo only */}
+      {!isDemoDataEnabled() && liveToday && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={cn(R.md, E_COMPONENT.card, "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-3")}>
+            <div className={cn(R.sm, "size-9 bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center shrink-0")}>
+              <Banknote className={cn("size-4", C.success.icon)} />
+            </div>
+            <div>
+              <p className={cn(T.label, "text-slate-400 dark:text-slate-500")}>{t("dash.live.revenue_today")}</p>
+              <p className={cn(T.h4, "text-slate-900 dark:text-slate-100 font-data")}>{formatRupiah(liveToday.totalRevenue, { compact: true })}</p>
+            </div>
+          </div>
+          <div className={cn(R.md, E_COMPONENT.card, "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-3")}>
+            <div className={cn(R.sm, "size-9 bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0")}>
+              <ShoppingCart className={cn("size-4", C.primary.icon)} />
+            </div>
+            <div>
+              <p className={cn(T.label, "text-slate-400 dark:text-slate-500")}>{t("dash.live.txn_today")}</p>
+              <p className={cn(T.h4, "text-slate-900 dark:text-slate-100 font-data")}>{liveToday.totalTransactions.toLocaleString("id-ID")}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Branch Filter */}
       {canSeeStock && (
-        <div className={cn(R.md, "flex flex-wrap items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700")}>
+        <div className={cn(R.md, "flex flex-col items-stretch gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 sm:flex-row sm:flex-wrap sm:items-center")}>
           <div className={cn(T.label, "flex items-center gap-1.5 text-slate-400 dark:text-slate-500 shrink-0")}>
-            <MapPin className="size-3" aria-hidden="true" /> Filter Cabang:
+            <MapPin className="size-3" aria-hidden="true" /> {t("dash.branch_filter")}:
           </div>
-          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Filter Cabang">
-            {BRANCHES.map(b => (
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap" role="group" aria-label={t("dash.branch_filter")}>
+            {branches.map(b => (
               <button
                 key={b.id}
                 onClick={() => setSelectedBranch(b.id)}
                 aria-pressed={selectedBranch === b.id}
                 className={cn(
-                  T.buttonSm, R.sm, "flex items-center gap-1.5 px-3 py-1.5 transition-all cursor-pointer",
+                  T.buttonSm, R.sm, A11Y.tapTarget, "flex items-center justify-center gap-1.5 px-3 py-1.5 transition-all cursor-pointer",
                   selectedBranch === b.id
                     ? "bg-slate-900 dark:bg-indigo-600 text-white shadow-md"
                     : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:bg-slate-700"
@@ -251,8 +360,8 @@ export function DashboardPage() {
             ))}
           </div>
           {selectedBranch !== "all" && (
-            <span className={cn(T.label, R.xs, "ml-auto text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-1 border border-indigo-100 dark:border-indigo-900")}>
-              {BRANCHES.find(b => b.id === selectedBranch)?.name}
+            <span className={cn(T.label, R.xs, "w-full text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-1 border border-indigo-100 dark:border-indigo-900 sm:ml-auto sm:w-auto")}>
+              {branches.find(b => b.id === selectedBranch)?.name}
             </span>
           )}
         </div>
@@ -260,15 +369,15 @@ export function DashboardPage() {
 
       {/* Business KPI Cards — Period Selector */}
       <div className="flex items-center justify-between">
-        <p className={cn(T.label, "text-slate-400 dark:text-slate-500")}>Ringkasan Penjualan</p>
-        <div className="flex gap-1" role="group" aria-label="Periode KPI">
+        <p className={cn(T.label, "text-slate-400 dark:text-slate-500")}>{t("dash.sales_summary")}</p>
+        <div className="flex gap-1" role="group" aria-label={t("dash.kpi_period")}>
           {PERIODS.map(p => (
             <button key={p.key} onClick={() => setKpiPeriod(p.key)}
               aria-pressed={kpiPeriod === p.key}
               className={cn(T.buttonSm, R.sm, "px-3 py-1.5 transition-all cursor-pointer",
                 kpiPeriod === p.key ? "bg-slate-900 dark:bg-indigo-600 text-white" : "bg-slate-50 dark:bg-slate-800 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
               )}
-            >{p.label}</button>
+            >{t(p.labelKey)}</button>
           ))}
         </div>
       </div>
@@ -307,44 +416,44 @@ export function DashboardPage() {
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <h3 className={cn(T.h4, "text-slate-900 dark:text-slate-100 flex items-center gap-2")}>
               <Building2 className={cn("size-3.5", C.primary.icon)} aria-hidden="true" />
-              Laporan Konsolidasi Multi-Cabang
+              {t("dash.report.consolidated")}
             </h3>
             <span className={cn(T.caption, "text-slate-400 font-data")}>
-              {PERIODS.find(p => p.key === kpiPeriod)?.label}
+              {t(PERIODS.find(p => p.key === kpiPeriod)?.labelKey ?? "dash.period.weekly")}
             </span>
           </div>
           <ResponsiveTable
-            label="Laporan Konsolidasi Multi-Cabang"
+            label={t("dash.report.consolidated")}
             scrollerClassName="rounded-none border-0 bg-transparent"
-            minWidthClassName="min-w-[820px]"
+            minWidthClassName={TABLE.minWidth.dashboard}
           >
-            <table className={TABLE.base} aria-label="Laporan Konsolidasi Multi-Cabang">
+            <table className={TABLE.base} aria-label={t("dash.report.consolidated")}>
               <thead className={TABLE.head}>
                 <tr>
-                  <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>Cabang</th>
-                  <th className={TABLE.headCell}>Omzet</th>
-                  <th className={TABLE.headCell}>Transaksi</th>
-                  <th className={TABLE.headCell}>Pertumbuhan</th>
-                  <th className={TABLE.headCell}>Stok Kritis</th>
-                  <th className={TABLE.headCell}>Staff</th>
-                  <th className={TABLE.headCell} aria-label="Aksi" />
+                  <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")}>{t("dash.table.branch")}</th>
+                  <th className={TABLE.headCell}>{t("dash.table.revenue")}</th>
+                  <th className={TABLE.headCell}>{t("dash.table.transactions")}</th>
+                  <th className={TABLE.headCell}>{t("dash.table.growth")}</th>
+                  <th className={TABLE.headCell}>{t("dash.table.critical_stock")}</th>
+                  <th className={TABLE.headCell}>{t("dash.table.staff")}</th>
+                  <th className={TABLE.headCell} aria-label={t("dash.table.action")} />
                 </tr>
               </thead>
               <tbody className={TABLE.body}>
-                {BRANCH_COMPARISON.map((b) => (
+                {branchComparison.map((b) => (
                   <tr
                     key={b.id}
-                    onClick={() => { setSelectedBranch(b.id as BranchId); toast.info(`Menampilkan: ${b.name}`); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setSelectedBranch(b.id as BranchId); toast.info(`Menampilkan: ${b.name}`); } }}
+                    onClick={() => { setSelectedBranch(b.id as BranchId); toast.info(t("dash.toast.showing_branch", { branch: b.name })); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setSelectedBranch(b.id as BranchId); toast.info(t("dash.toast.showing_branch", { branch: b.name })); } }}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Filter ke ${b.name}`}
+                    aria-label={t("dash.aria.filter_branch_to", { branch: b.name })}
                     className={cn(TABLE.rowInteractive, "group")}
                   >
-                    <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                    <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                       <div className="flex items-center gap-2.5">
                         <div className={cn(T.label, R.sm, "size-8 bg-slate-900 dark:bg-slate-700 text-white flex items-center justify-center shrink-0")}>
-                          {BRANCHES.find(br => br.id === b.id)?.short}
+                          {branches.find(br => br.id === b.id)?.short}
                         </div>
                         <div>
                           <p className={cn(T.bodySm, "font-bold text-slate-900 dark:text-slate-200 leading-tight")}>{b.name}</p>
@@ -379,7 +488,7 @@ export function DashboardPage() {
                       </span>
                     </td>
                     <td className={TABLE.cell}>
-                      <p className={cn(T.bodySm, "font-bold text-slate-500 dark:text-slate-400")}>{b.staffCount} orang</p>
+                      <p className={cn(T.bodySm, "font-bold text-slate-500 dark:text-slate-400")}>{b.staffCount} {t("dash.table.people")}</p>
                     </td>
                     <td className={cn(TABLE.cell, "text-right")}>
                       <ChevronRight className="size-3.5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
@@ -389,16 +498,16 @@ export function DashboardPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-t-2 border-slate-200 dark:border-slate-700">
-                  <td className={cn(TABLE.cell, T.label, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400")}>Total Konsolidasi</td>
-                  <td className={cn(TABLE.cell, T.dataSm, "font-bold text-slate-900 dark:text-slate-200")}>{PERIOD_KPIS[kpiPeriod][0].value}</td>
-                  <td className={cn(TABLE.cell, T.dataSm, "font-bold text-slate-900 dark:text-slate-200")}>{PERIOD_KPIS[kpiPeriod][1].value}</td>
+                  <td className={cn(TABLE.cell, T.label, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400")}>{t("dash.table.total_consolidated")}</td>
+                  <td className={cn(TABLE.cell, T.dataSm, "font-bold text-slate-900 dark:text-slate-200")}>{ALL_PERIOD_KPIS[0]?.value ?? "-"}</td>
+                  <td className={cn(TABLE.cell, T.dataSm, "font-bold text-slate-900 dark:text-slate-200")}>{ALL_PERIOD_KPIS[1]?.value ?? "-"}</td>
                   <td className={TABLE.cell}>
                     <span className={cn(T.micro, R.xs, "inline-flex items-center gap-1 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30")}>
-                      <ArrowUpRight className="size-2.5" />{PERIOD_KPIS[kpiPeriod][0].change}
+                      <ArrowUpRight className="size-2.5" />{ALL_PERIOD_KPIS[0]?.change ?? "-"}
                     </span>
                   </td>
                   <td className={cn(TABLE.cell, T.bodySm, "font-bold text-slate-500 dark:text-slate-400")}>{totalCriticalStock} SKU</td>
-                  <td className={cn(TABLE.cell, T.bodySm, "font-bold text-slate-500 dark:text-slate-400")}>{totalStaff} orang</td>
+                  <td className={cn(TABLE.cell, T.bodySm, "font-bold text-slate-500 dark:text-slate-400")}>{totalStaff} {t("dash.table.people")}</td>
                   <td className={TABLE.cell} />
                 </tr>
               </tfoot>
@@ -468,7 +577,7 @@ export function DashboardPage() {
       {/* Footer Info */}
       <div className={cn(T.caption, "pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 dark:text-slate-400")}>
          <div className="flex items-center gap-4">
-            <p>© 2026 InsightSphere — AI-Powered Retail ERP</p>
+            <p>© 2026 InsightSphere — {t("dash.footer.product")}</p>
             <span className="text-slate-200 dark:text-slate-700">|</span>
             <p className={cn("flex items-center gap-1", C.success.icon)}>
                <span className="size-1 rounded-full bg-emerald-500" />
@@ -476,8 +585,8 @@ export function DashboardPage() {
             </p>
          </div>
          <div className="flex items-center gap-5">
-            <button onClick={() => toast.info(t("dash.toast.status"))} aria-label="Lihat status sistem InsightSphere" className="hover:text-indigo-600 transition-colors cursor-pointer">{t("common.status")}</button>
-            <button onClick={() => toast.info(t("dash.toast.security"))} aria-label="Lihat informasi keamanan InsightSphere" className="hover:text-indigo-600 transition-colors cursor-pointer">{t("common.security")}</button>
+            <button onClick={() => toast.info(t("dash.toast.status"))} aria-label={t("dash.aria.view_system_status")} className="hover:text-indigo-600 transition-colors cursor-pointer">{t("common.status")}</button>
+            <button onClick={() => toast.info(t("dash.toast.security"))} aria-label={t("dash.aria.view_security_info")} className="hover:text-indigo-600 transition-colors cursor-pointer">{t("common.security")}</button>
             <button onClick={() => router.push("/pengaturan")} className={cn(T.buttonSm, R.sm, "px-3 py-1.5 bg-slate-900 dark:bg-indigo-900/30 dark:border dark:border-indigo-800/50 text-white dark:text-indigo-400 hover:bg-indigo-600 dark:hover:bg-indigo-900/40 transition-all cursor-pointer")}>
                {t("common.documentation")}
             </button>
