@@ -21,10 +21,17 @@ import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
 import { Z } from "@/app/lib/elevation";
+import { DROPDOWN } from "@/app/lib/overlays";
 import Link from "next/link";
 import { ExportShareModal, ShareData } from "./ExportShareModal";
 import { useTranslation } from "@/app/i18n";
 import { useEscapeClose } from "@/app/hooks/useEscapeClose";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import {
+  fetchNotifications,
+  markNotificationRead,
+  type NotificationRead as ApiNotification,
+} from "@/app/lib/notification-client";
 
 // --- Types ---
 
@@ -43,33 +50,55 @@ interface Notification {
   linkText?: string;
 }
 
-// --- Initial Data ---
+const MAX_NOTIFICATIONS = 50;
+const POLL_INTERVAL_MS = 30_000;
 
-/* ── Fix #4: moved to module level so useEffect([], []) closure is always fresh ── */
-const POLL_NOTIFICATIONS: Notification[] = [
-  { id: "", type: "anomali", title: "Anomali Baru: Lonjakan Aqua 500ml", message: "Permintaan naik 60% tiba-tiba. Deteksi event di sekitar Bandara.", time: "", urgency: "tinggi", isRead: false, link: "/prediksi-stok", linkText: "Cek Prediksi" },
-  { id: "", type: "kritis", title: "Stok Kritis: Tinta Epson 003", message: "Sisa stok 2 unit. Segera lakukan reorder sebelum kehabisan.", time: "", urgency: "tinggi", isRead: false, link: "/inventaris", linkText: "Reorder" },
-  { id: "", type: "prediksi", title: "Prediksi Diperbarui: Minggu Depan", message: "Model merevisi forecast +12% untuk kategori ATK. Periksa dashboard.", time: "", urgency: "sedang", isRead: false, link: "/prediksi-stok", linkText: "Lihat Forecast" },
-  { id: "", type: "peluang", title: "Peluang: Cross-sell Kertas + Tinta", message: "Korelasi pembelian 68% terdeteksi. Pertimbangkan bundling promo.", time: "", urgency: "rendah", isRead: false, link: "/penjelasan-ai", linkText: "Detail" },
-];
+// --- Mappers: backend API → UI types ---
 
-const MAX_NOTIFICATIONS = 20;
+const mapPriority = (p: ApiNotification["priority"]): Urgency => {
+  if (p === "CRITICAL" || p === "HIGH") return "tinggi";
+  if (p === "MEDIUM") return "sedang";
+  return "rendah";
+};
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  { id: "1", type: "anomali", title: "Anomali: Penjualan Chitato naik 45%", message: "Analisis AI menunjukkan efek promo bundling dengan Minyak Goreng.", time: "5 menit lalu", urgency: "tinggi", isRead: false, link: "/penjelasan-ai", linkText: "Lihat XAI" },
-  { id: "2", type: "kritis", title: "3 Produk Butuh Restok", message: "Beras Premium, Roti Tawar, dan Sabun Cair mendekati stok nol.", time: "12 menit lalu", urgency: "tinggi", isRead: false, link: "/inventaris", linkText: "Buka Inventaris" },
-  { id: "3", type: "prediksi", title: "Model AI Diperbarui", message: "Akurasi prediksi retail naik dari 93.1% ke 94.3% setelah retraining.", time: "1 jam lalu", urgency: "sedang", isRead: true },
-  { id: "4", type: "peluang", title: "Peluang: Bundling Beras + Minyak", message: "Terdapat korelasi 72% pembelian bersama di Cabang Pusat.", time: "2 jam lalu", urgency: "rendah", isRead: true, link: "/penjelasan-ai", linkText: "Detail Peluang" },
-  { id: "5", type: "anomali", title: "Model Drift: Kategori Dairy", message: "Akurasi kategori Susu turun 5%. Perlu penyesuaian parameter.", time: "3 jam lalu", urgency: "sedang", isRead: true, link: "/pengaturan/ai", linkText: "Cek Config" },
-  { id: "6", type: "sistem", title: "Laporan Mingguan Siap", message: "Laporan periode 7-14 Apr 2026 telah digenerate secara otomatis.", time: "5 jam lalu", urgency: "rendah", isRead: true, link: "/laporan", linkText: "Unduh PDF" },
-  { id: "7", type: "kritis", title: "Overstock: Susu Ultra 1L", message: "120 unit mendekati masa kadaluarsa dalam 5 hari ke depan.", time: "6 jam lalu", urgency: "tinggi", isRead: true, link: "/inventaris", linkText: "Tindak Lanjuti" },
-];
+const mapCategory = (
+  cat: ApiNotification["category"],
+  priority: ApiNotification["priority"],
+): NotifType => {
+  if (cat === "INVENTORY") return priority === "CRITICAL" || priority === "HIGH" ? "kritis" : "prediksi";
+  if (cat === "AI_INSIGHT") return priority === "CRITICAL" || priority === "HIGH" ? "anomali" : "prediksi";
+  if (cat === "SALES") return "peluang";
+  return "sistem";
+};
+
+const relativeTime = (iso: string): string => {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "__just_now__";
+  if (mins < 60) return `${mins} menit lalu`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} jam lalu`;
+  return `${Math.floor(hrs / 24)} hari lalu`;
+};
+
+const mapApiNotification = (n: ApiNotification): Notification => ({
+  id: n.id,
+  type: mapCategory(n.category, n.priority),
+  title: n.title,
+  message: n.message,
+  time: relativeTime(n.created_at),
+  urgency: mapPriority(n.priority),
+  isRead: n.is_read,
+  link: n.action_link ?? undefined,
+  linkText: undefined,
+});
 
 export function NotificationCenter() {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationPollTemplates, setNotificationPollTemplates] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState("Semua");
   const [newNotifPing, setNewNotifPing] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -91,39 +120,86 @@ export function NotificationCenter() {
   const pollCountRef = useRef(0);
   const pingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // === Demo mode: load seed data + fake polling ===
   useEffect(() => {
-    const POLL_INTERVAL_MS = 30_000;
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/notifications").then(({ DEMO_NOTIFICATIONS, DEMO_NOTIFICATION_POLL_TEMPLATES }) => {
+      if (!cancelled) {
+        setNotifications(DEMO_NOTIFICATIONS);
+        setNotificationPollTemplates(DEMO_NOTIFICATION_POLL_TEMPLATES);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!isDemoDataEnabled() || notificationPollTemplates.length === 0) return;
 
     const poll = () => {
-      /* Fix #1: respect isMuted — skip prepend + ping when muted */
       if (isMuted) return;
-
-      const template = POLL_NOTIFICATIONS[pollCountRef.current % POLL_NOTIFICATIONS.length];
-      const newNotif: Notification = {
-        ...template,
-        id: `poll-${Date.now()}`,
-        time: "__just_now__",
-      };
+      const template = notificationPollTemplates[pollCountRef.current % notificationPollTemplates.length];
+      const newNotif: Notification = { ...template, id: `poll-${Date.now()}`, time: "__just_now__" };
       pollCountRef.current += 1;
-      /* Fix #3: cap list at MAX_NOTIFICATIONS */
       setNotifications(prev => [newNotif, ...prev].slice(0, MAX_NOTIFICATIONS));
       setLastPolled(new Date());
       setNewNotifPing(true);
-      /* Fix #2: store timer ref so it can be cleaned up */
       if (pingTimerRef.current) clearTimeout(pingTimerRef.current);
       pingTimerRef.current = setTimeout(() => setNewNotifPing(false), 3000);
     };
 
     const timer = setTimeout(poll, 8000);
     const interval = setInterval(poll, POLL_INTERVAL_MS);
-
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
-      /* Fix #2: clean up ping timer on unmount */
       if (pingTimerRef.current) clearTimeout(pingTimerRef.current);
     };
-  }, [isMuted]);
+  }, [isMuted, notificationPollTemplates]);
+
+  // === Non-demo mode: fetch real notifications + polling ===
+  useEffect(() => {
+    if (isDemoDataEnabled()) return;
+
+    let cancelled = false;
+
+    const load = (isBackground = false) => {
+      fetchNotifications({ limit: 50 })
+        .then((res) => {
+          if (cancelled) return;
+          const mapped = res.items.map(mapApiNotification);
+          if (isBackground) {
+            // Merge: prepend new (unseen) items, preserve local read state for existing
+            setNotifications((prev) => {
+              const prevIds = new Set(prev.map((n) => n.id));
+              const newItems = mapped.filter((m) => !prevIds.has(m.id));
+              if (newItems.length === 0) return prev;
+              if (!isMuted) {
+                setNewNotifPing(true);
+                if (pingTimerRef.current) clearTimeout(pingTimerRef.current);
+                pingTimerRef.current = setTimeout(() => setNewNotifPing(false), 3000);
+              }
+              return [...newItems, ...prev].slice(0, MAX_NOTIFICATIONS);
+            });
+          } else {
+            setNotifications(mapped.slice(0, MAX_NOTIFICATIONS));
+          }
+          setLastPolled(new Date());
+        })
+        .catch(() => { /* silent — keep existing list */ });
+    };
+
+    load(false);
+    const interval = setInterval(() => load(true), POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (pingTimerRef.current) clearTimeout(pingTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -135,8 +211,28 @@ export function NotificationCenter() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  const toggleRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n));
+  const markAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    if (!isDemoDataEnabled()) {
+      const unreadIds = notifications.filter(n => !n.isRead).map(n => n.id);
+      for (const id of unreadIds) {
+        void markNotificationRead(id).catch(() => { /* best-effort */ });
+      }
+    }
+  };
+
+  const toggleRead = (id: string) => {
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n)
+    );
+    if (!isDemoDataEnabled()) {
+      const target = notifications.find(n => n.id === id);
+      if (target && !target.isRead) {
+        void markNotificationRead(id).catch(() => { /* best-effort */ });
+      }
+    }
+  };
+
   const removeNotif = (id: string) => setNotifications(prev => prev.filter(n => n.id !== id));
 
   const handleShare = (n: Notification) => {
@@ -206,14 +302,14 @@ export function NotificationCenter() {
           unreadCount <= 9 ? (
             <span className={cn(
               T.label,
-              "absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full border-2 border-white text-white leading-none",
+              DROPDOWN.notificationBadge.count,
               notifications.some(n => n.type === "anomali" && !n.isRead) ? "bg-rose-500" : "bg-indigo-600",
               newNotifPing && "animate-ping"
             )}>{unreadCount}</span>
           ) : (
             <span className={cn(
               T.caption,
-              "absolute -top-1 -right-1 w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white font-bold text-white leading-none",
+              DROPDOWN.notificationBadge.overflow,
               "bg-rose-500"
             )}>9+</span>
           )
@@ -223,10 +319,10 @@ export function NotificationCenter() {
       {/* Dropdown Panel */}
       {isOpen && (
         <div 
-          className={cn("fixed left-4 right-4 top-16 max-h-[calc(100dvh-5rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-4 sm:w-[440px] sm:max-h-[700px] sm:rounded-3xl", Z.dropdown, "animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-150")}
+          className={cn(DROPDOWN.size.notificationPanel, "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:rounded-3xl", Z.dropdown, "animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-150")}
         >
             {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
+            <div className={cn("px-5 py-4 border-b border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0", Z.raised)}>
                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                      <h3 className={cn(T.h4, "text-slate-900 dark:text-slate-100")}>{t("notif.header")}</h3>
@@ -355,10 +451,10 @@ export function NotificationCenter() {
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between sticky bottom-0 z-10">
+            <div className={cn("px-5 py-3 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between sticky bottom-0", Z.raised)}>
                <p className={cn(T.caption, "text-slate-400 flex items-center gap-2")}>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {t("notif.polling")} · {lastPolled.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  {isDemoDataEnabled() ? t("notif.polling") : t("notif.live")} · {lastPolled.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                </p>
                <Link 
                  href="/pengaturan" 

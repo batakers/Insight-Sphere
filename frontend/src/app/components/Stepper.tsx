@@ -1,10 +1,10 @@
 "use client";
 
-import { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
 import { STEPPER, type StepperState, type StepperSize } from "@/app/lib/nav";
+import { useTranslation } from "@/app/i18n";
 
 /**
  * Stepper — Multi-step progress indicator.
@@ -65,12 +65,13 @@ export function Stepper({
   size = "md",
   className,
 }: StepperProps) {
+  const { t } = useTranslation();
   const isVertical = orientation === "vertical";
   const sizeTokens = STEPPER.size[size];
 
   return (
     <nav
-      aria-label="Progress"
+      aria-label={t("common.progress")}
       className={cn(
         isVertical ? STEPPER.wrapperVertical : STEPPER.wrapperHorizontal,
         className
@@ -218,7 +219,7 @@ function StepCircle({ index, state, sizeTokens }: StepCircleProps) {
       aria-hidden="true"
     >
       {state === "completed" ? (
-        <Check className="size-4 stroke-[3]" />
+        <Check className="size-4" strokeWidth={3} />
       ) : (
         <span className="tabular-nums">{index + 1}</span>
       )}

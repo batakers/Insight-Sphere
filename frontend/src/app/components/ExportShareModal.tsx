@@ -29,6 +29,7 @@ import { E, Z } from "@/app/lib/elevation";
 import { formatRupiah } from "@/app/lib/format";
 import { useTranslation } from "@/app/i18n";
 import { INPUT, TEXTAREA } from "@/app/lib/forms";
+import { buildShareUrl } from "@/app/lib/share-providers";
 
 // --- Types ---
 
@@ -59,6 +60,11 @@ const CONTACTS = [
   { id: "4", name: "Tim Purchasing", group: true, size: 3, phone: "62815000004" },
   { id: "5", name: "Semua Manajer", group: true, size: 4, phone: "62816000005" },
 ];
+
+const SHARE_PREVIEW = {
+  whatsappShell: "bg-emerald-50 dark:bg-emerald-950/30",
+  whatsappBubble: "bg-emerald-100 dark:bg-emerald-900/50",
+} as const;
 
 export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProps) {
   const { t, lang } = useTranslation();
@@ -111,12 +117,14 @@ export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProp
   const handleSendWA = () => {
     setIsSending(true);
     setTimeout(() => {
-      const msg = encodeURIComponent(formatWAMessage());
-      // For demo, we just open the first selected contact or a generic one
       const phone = selectedContacts.length > 0 
         ? CONTACTS.find(c => c.id === selectedContacts[0])?.phone
         : "";
-      window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+      window.open(
+        buildShareUrl("whatsapp", { phone, text: formatWAMessage() }),
+        "_blank",
+        "noopener,noreferrer",
+      );
       setIsSending(false);
     }, 1500);
   };
@@ -236,7 +244,7 @@ export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProp
                             />
                          </div>
 
-                         <div className="flex items-center justify-between bg-slate-50 p-4 rounded-[1.5rem]">
+                         <div className={cn(R.xl, "flex items-center justify-between bg-slate-50 p-4")}>
                             <div className="flex items-center gap-3">
                                {hidePrivateData ? <ShieldCheck className="size-5 text-indigo-500" /> : <ShieldOff className="size-5 text-slate-400" />}
                                <div>
@@ -259,12 +267,12 @@ export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProp
                       {/* Preview Side (WhatsApp Bubble) */}
                       <div className="space-y-4">
                          <p className={cn(T.label, "text-slate-400")}>{t("share.preview.wa")}</p>
-                         <div className="bg-[#e5ddd5] rounded-[2.5rem] p-8 h-[400px] relative overflow-hidden flex flex-col justify-end border-8 border-slate-100 shadow-inner">
+                         <div className={cn(R.xl, E.inner, SHARE_PREVIEW.whatsappShell, "p-8 h-[400px] relative overflow-hidden flex flex-col justify-end border-8 border-slate-100")}>
                             <div className="absolute top-0 inset-x-0 bg-slate-900/10 p-4 border-b border-white/20 backdrop-blur-sm flex items-center justify-center">
                                <p className={cn(T.label, "text-slate-900")}>{t("share.preview.team")}</p>
                             </div>
                             
-                            <div className="bg-[#dcf8c6] p-6 rounded-2xl rounded-tr-none shadow-sm relative self-end max-w-[90%] animate-in slide-in-from-right duration-300">
+                            <div className={cn(R.lg, SHARE_PREVIEW.whatsappBubble, E.sm, "p-6 rounded-tr-none relative self-end max-w-[90%] animate-in slide-in-from-right duration-300")}>
                                <div className={cn("whitespace-pre-wrap font-bold text-slate-800 leading-relaxed font-sans", T.label)}>
                                   {formatWAMessage().split("\n").map((line, i) => (
                                     <div key={i}>{line}</div>
@@ -307,7 +315,7 @@ export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProp
                          </div>
 
                          {/* Preview PDF */}
-                         <div className="bg-slate-50 rounded-[3rem] border border-slate-100 p-10 flex flex-col items-center justify-center text-center space-y-6">
+                         <div className={cn(R.xl, "bg-slate-50 border border-slate-100 p-10 flex flex-col items-center justify-center text-center space-y-6")}>
                              <div className={cn(R.xl, E.lg, "size-24 bg-white dark:bg-slate-800 flex items-center justify-center")}>
                                 <FileText className="size-12 text-indigo-500" />
                              </div>
@@ -333,7 +341,7 @@ export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProp
 
                 {activeTab === "email" && (
                    <div className="space-y-8 max-w-2xl mx-auto">
-                      <div className="bg-amber-50 border border-amber-100 p-8 rounded-[2.5rem] flex gap-6 items-center">
+                      <div className={cn(R.xl, "bg-amber-50 border border-amber-100 p-8 flex gap-6 items-center")}>
                          <div className={cn(R.lg, "size-14 bg-amber-500 text-white flex items-center justify-center shrink-0")}>
                             <Settings className="size-8" />
                          </div>
@@ -346,7 +354,7 @@ export function ExportShareModal({ isOpen, onClose, data }: ExportShareModalProp
                       <div className="space-y-6">
                          <div className="space-y-2">
                            <p className={cn(T.label, "text-slate-400")}>{lang === "ID" ? "Penerima" : "Recipient"}</p>
-                           <input type="text" value="HQ@insightsphere.id" readOnly className={cn(INPUT.base, INPUT.size.lg, INPUT.readonly, T.bodySm, "font-bold")} />
+                           <input type="text" value="hq@example.test" readOnly className={cn(INPUT.base, INPUT.size.lg, INPUT.readonly, T.bodySm, "font-bold")} />
                          </div>
                          <div className="space-y-2">
                            <p className={cn(T.label, "text-slate-400")}>{lang === "ID" ? "Subjek" : "Subject"}</p>

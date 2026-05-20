@@ -45,7 +45,7 @@ export function FactorBar({ factor }: { factor: XAIFactor }) {
             <span className="text-foreground font-bold group-hover:translate-x-0.5 transition-transform">
               {factor.name}
             </span>
-            <p className={cn("text-muted-foreground font-medium leading-tight max-w-[200px] opacity-0 group-hover:opacity-100 transition-opacity", T.label)}>
+            <p className={cn("text-muted-foreground font-medium leading-tight max-w-48 opacity-0 group-hover:opacity-100 transition-opacity", T.label)}>
               {factor.description}
             </p>
           </div>
@@ -135,7 +135,7 @@ export function InsightCard({ insight }: { insight: XAIInsight }) {
 
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-2xl border p-5 transition-all hover:shadow-xl hover:translate-y-[-2px] group",
+      "relative overflow-hidden rounded-2xl border p-5 transition-all hover:shadow-xl hover:-translate-y-0.5 group",
       config.bg,
       config.border
     )}>

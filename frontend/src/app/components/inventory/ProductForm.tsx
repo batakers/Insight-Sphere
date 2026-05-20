@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Loader2, Package, Save } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { MODAL } from "@/app/lib/containers";
 import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
@@ -10,21 +11,24 @@ import { E } from "@/app/lib/elevation";
 import { useTranslation } from "@/app/i18n";
 import { ERROR_TEXT, FIELD, INPUT, LABEL, SELECT, TEXTAREA } from "@/app/lib/forms";
 
-interface ProductFormData {
+export interface ProductFormData {
+  sku: string;
   name: string;
+  family: string;
   category: string;
   price: number;
   stock: number;
   unit: string;
   minThreshold: number;
   description: string;
+  supplier: string;
 }
 
 interface ProductFormProps {
   mode: "add" | "edit";
   initialData?: Partial<ProductFormData>;
   onClose: () => void;
-  onSubmit: (data: ProductFormData) => void;
+  onSubmit: (data: ProductFormData) => Promise<void> | void;
 }
 
 const CATEGORIES = ["Sembako", "Minuman", "Snack", "Dairy", "Frozen", "Bakery", "ATK", "Elektronik", "Lainnya"];
@@ -39,18 +43,23 @@ export function ProductForm({ mode, initialData, onClose, onSubmit }: ProductFor
   const [errors, setErrors] = useState<Partial<Record<keyof ProductFormData, string>>>({});
 
   const [form, setForm] = useState<ProductFormData>({
+    sku: initialData?.sku || "",
     name: initialData?.name || "",
+    family: initialData?.family || "",
     category: initialData?.category || "",
     price: initialData?.price || 0,
     stock: initialData?.stock || 0,
     unit: initialData?.unit || "",
     minThreshold: initialData?.minThreshold || 10,
     description: initialData?.description || "",
+    supplier: initialData?.supplier || "",
   });
 
   const validate = (): boolean => {
     const e: Partial<Record<keyof ProductFormData, string>> = {};
+    if (mode === "add" && !form.sku.trim()) e.sku = t("inv.form.required");
     if (!form.name.trim()) e.name = t("inv.form.required");
+    if (mode === "add" && !form.family.trim()) e.family = t("inv.form.required");
     if (!form.category) e.category = t("inv.form.required");
     if (form.price < 1) e.price = t("inv.form.min_1");
     if (form.stock < 0) e.stock = t("inv.form.min_0");
@@ -64,10 +73,11 @@ export function ProductForm({ mode, initialData, onClose, onSubmit }: ProductFor
     ev.preventDefault();
     if (!validate()) return;
     setIsSaving(true);
-    // Simulate API call
-    await new Promise(r => setTimeout(r, 1200));
-    onSubmit(form);
-    setIsSaving(false);
+    try {
+      await onSubmit(form);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const updateField = <K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) => {
@@ -99,7 +109,56 @@ export function ProductForm({ mode, initialData, onClose, onSubmit }: ProductFor
         </div>
 
         {/* Form */}
-        <form id="product-form" onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+        <form id="product-form" onSubmit={handleSubmit} className={cn(MODAL.bodyScroll, "space-y-4 custom-scrollbar")}>
+          {/* SKU + Family (add mode only) */}
+          {mode === "add" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className={FIELD.wrapper}>
+                <label htmlFor="pf-sku" className={LABEL.base}>SKU <span className="text-rose-500">*</span></label>
+                <input
+                  id="pf-sku"
+                  type="text"
+                  value={form.sku}
+                  onChange={e => updateField("sku", e.target.value)}
+                  placeholder="SKU-001"
+                  className={cn(PRODUCT_FIELD, errors.sku && INPUT.error)}
+                />
+                {errors.sku && <p className={ERROR_TEXT.base}>{errors.sku}</p>}
+              </div>
+              <div className={FIELD.wrapper}>
+                <label htmlFor="pf-family" className={LABEL.base}>Family ML <span className="text-rose-500">*</span></label>
+                <input
+                  id="pf-family"
+                  list="pf-family-list"
+                  type="text"
+                  value={form.family}
+                  onChange={e => updateField("family", e.target.value)}
+                  placeholder="GROCERY I"
+                  className={cn(PRODUCT_FIELD, errors.family && INPUT.error)}
+                />
+                <datalist id="pf-family-list">
+                  {["GROCERY I","GROCERY II","BEVERAGES","CLEANING","PERSONAL CARE","DAIRY","FROZEN","BREAD/BAKERY","DELI","PRODUCE"].map(f => (
+                    <option key={f} value={f} />
+                  ))}
+                </datalist>
+                {errors.family && <p className={ERROR_TEXT.base}>{errors.family}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Supplier */}
+          <div className={FIELD.wrapper}>
+            <label htmlFor="pf-supplier" className={LABEL.base}>{t("inv.form.supplier")}</label>
+            <input
+              id="pf-supplier"
+              type="text"
+              value={form.supplier}
+              onChange={e => updateField("supplier", e.target.value)}
+              placeholder={t("inv.form.supplier_placeholder")}
+              className={PRODUCT_FIELD}
+            />
+          </div>
+
           {/* Name */}
           <div className={FIELD.wrapper}>
             <label htmlFor="pf-name" className={LABEL.base}>{t("inv.form.name")}</label>

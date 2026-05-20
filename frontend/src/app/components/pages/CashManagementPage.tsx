@@ -25,6 +25,7 @@ import { TABLE, BADGE } from "@/app/lib/data";
 import { EmptyState } from "@/app/components/ui/EmptyState";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
 /* ── Types & Mock Data ────────────────────────────────────────────── */
 type CashType = "income" | "expense" | "adjustment" | "transfer";
@@ -43,20 +44,6 @@ const CATEGORIES_BY_TYPE: Record<CashType, string[]> = {
 };
 const DATE_PERIODS = ["Hari Ini", "Kemarin", "7 Hari Terakhir", "30 Hari Terakhir", "Custom"];
 
-const MOCK_ENTRIES: CashEntry[] = [
-  { id: "cas-1", date: new Date(2024, 2, 15, 9, 30), type: "income", category: "Penjualan", description: "Penjualan harian shift pagi", amount: 2500000, operator: "Rini Susanti", status: "completed", reference: "TX-2024-0412" },
-  { id: "cas-2", date: new Date(2024, 2, 15, 14, 0), type: "expense", category: "Operasional", description: "Pembelian kertas dan tinta", amount: 850000, operator: "Budi Hartono", status: "completed", reference: "PO-2024-0324" },
-  { id: "cas-3", date: new Date(2024, 2, 14, 10, 15), type: "income", category: "Penjualan", description: "Penjualan fotokopi dan print", amount: 1200000, operator: "Rini Susanti", status: "completed", reference: "TX-2024-0411" },
-  { id: "cas-4", date: new Date(2024, 2, 14, 16, 30), type: "expense", category: "Gaji", description: "Gaji karyawan mingguan", amount: 3500000, operator: "Ahmad Faiz", status: "completed", reference: "PY-2024-0012" },
-  { id: "cas-5", date: new Date(2024, 2, 13, 11, 0), type: "transfer", category: "Antar Kas", description: "Transfer ke rekening operasional", amount: 5000000, operator: "Ahmad Faiz", status: "completed", reference: "TRF-2024-0003" },
-  { id: "cas-6", date: new Date(2024, 2, 13, 9, 0), type: "income", category: "Modal Masuk", description: "Modal tambahan dari pemilik", amount: 10000000, operator: "Ahmad Faiz", status: "completed", reference: "MDL-2024-0001" },
-  { id: "cas-7", date: new Date(2024, 2, 12, 13, 45), type: "expense", category: "Peralatan", description: "Servis mesin fotokopi", amount: 1200000, operator: "Budi Hartono", status: "completed", reference: "SVC-2024-0005" },
-  { id: "cas-8", date: new Date(2024, 2, 12, 15, 20), type: "adjustment", category: "Koreksi", description: "Koreksi selisih kasir", amount: -50000, operator: "Rini Susanti", status: "completed", reference: "ADJ-2024-0002" },
-  { id: "cas-9", date: new Date(2024, 2, 11, 8, 30), type: "income", category: "Penjualan", description: "Penjualan awal bulan", amount: 3200000, operator: "Dewi Kusuma", status: "completed", reference: "TX-2024-0408" },
-  { id: "cas-10", date: new Date(2024, 2, 11, 17, 0), type: "expense", category: "Operasional", description: "Bayar listrik dan internet", amount: 950000, operator: "Budi Hartono", status: "pending", reference: "BIL-2024-0003" },
-  { id: "cas-11", date: new Date(2024, 2, 10, 12, 0), type: "income", category: "Lainnya", description: "Pendapatan jasa laminating", amount: 450000, operator: "Rini Susanti", status: "completed", reference: "TX-2024-0407" },
-  { id: "cas-12", date: new Date(2024, 2, 10, 14, 30), type: "expense", category: "Operasional", description: "Pembelian toner printer", amount: 680000, operator: "Budi Hartono", status: "cancelled", reference: "PO-2024-0320" },
-];
 
 const TYPE_META: Record<CashType, { label: string; icon: typeof ArrowUpCircle; badgeBg: string; badgeText: string; badgeBorder: string }> = {
   income:      { label: "Pemasukan",   icon: ArrowUpCircle,     badgeBg: C.success.bg,       badgeText: C.success.text,       badgeBorder: C.success.border },
@@ -78,7 +65,16 @@ const _localISODate = new Date(_today.getTime() - (_today.getTimezoneOffset() * 
 /* ── Component ────────────────────────────────────────────────────── */
 export default function CashManagementPage() {
   const { t } = useTranslation();
-  const [entries, setEntries] = useState<CashEntry[]>(MOCK_ENTRIES);
+  const [entries, setEntries] = useState<CashEntry[]>([]);
+  /* ---- Demo mode: lazy-load cash entries fixture only when explicitly enabled ---- */
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+    let cancelled = false;
+    void import("@/app/demo/cash-management").then(({ DEMO_CASH_ENTRIES }) => {
+      if (!cancelled) setEntries(DEMO_CASH_ENTRIES as CashEntry[]);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<CashType | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string | "all">("all");
@@ -301,12 +297,12 @@ export default function CashManagementPage() {
         <ResponsiveTable
           label={t("cm.header")}
           scrollerClassName="rounded-none border-0 bg-transparent"
-          minWidthClassName="min-w-[1280px]"
+          minWidthClassName={TABLE.minWidth.cashManagement}
         >
           <table className={TABLE.base} aria-label={t("cm.header")}>
             <thead className={cn(TABLE.head, "border-b", C.neutral.border)}>
               <tr>
-                <th className={cn(TABLE.headCell, TABLE.headCellSortable, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>
+                <th className={cn(TABLE.headCell, TABLE.headCellSortable, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")}>
                   <button type="button" onClick={() => toggleSort("date")} className={cn("flex items-center", GAP.compact, "hover:text-slate-900 dark:hover:text-slate-100 transition-colors w-full", A11Y.focusRing.default)}>
                     {t("cm.table.date")} <ArrowUpDown className={cn(ICON.xs, "text-slate-400")} />
                   </button>
@@ -339,7 +335,7 @@ export default function CashManagementPage() {
                   const balance = runningBalance(rec.id);
                   return (
                     <tr key={rec.id} className={cn(TABLE.row, TABLE.rowHover, "group")}>
-                      <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                      <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                         <span className={cn(T.body, "text-slate-500")}>{formatDate(rec.date, "compact")}</span>
                       </td>
                       <td className={TABLE.cell}>
@@ -429,7 +425,7 @@ export default function CashManagementPage() {
           className={cn("fixed inset-0", BACKDROP.overlay, Z.overlay, MODAL.wrapper, "animate-in fade-in duration-150")}
           onClick={(e) => { if (e.currentTarget === e.target) setIsModalOpen(false); }} role="presentation">
           <div
-            className={cn(MODAL.container, MODAL.size.lg, "max-h-[90vh] overflow-hidden flex flex-col", Z.modal, "animate-in zoom-in-95 duration-150")}
+            className={cn(MODAL.container, MODAL.size.lg, "overflow-hidden flex flex-col", MODAL.maxHeight.lg, Z.modal, "animate-in zoom-in-95 duration-150")}
             tabIndex={0} onKeyDown={(e) => { if (e.key === "Escape") setIsModalOpen(false); }} onClick={(e) => e.stopPropagation()}
             role="dialog" aria-modal="true" aria-labelledby="modal-title">
               <div className={cn(MODAL.header, "justify-between")}>
@@ -522,7 +518,7 @@ export default function CashManagementPage() {
           className={cn("fixed inset-0", BACKDROP.overlay, Z.overlay, MODAL.wrapper, "animate-in fade-in duration-150")}
           onClick={(e) => { if (e.currentTarget === e.target) setIsDeleteModalOpen(false); }} role="presentation">
           <div
-            className={cn(MODAL.container, MODAL.size.sm, "max-h-[90vh] overflow-hidden flex flex-col", Z.modal, "animate-in zoom-in-95 duration-150")}
+            className={cn(MODAL.container, MODAL.size.sm, "overflow-hidden flex flex-col", MODAL.maxHeight.lg, Z.modal, "animate-in zoom-in-95 duration-150")}
             tabIndex={0} onKeyDown={(e) => { if (e.key === "Escape") setIsDeleteModalOpen(false); }} onClick={(e) => e.stopPropagation()}
             role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
               <div className={cn(MODAL.header, "justify-between")}>

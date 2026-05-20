@@ -47,6 +47,8 @@ import { TABLE, BADGE, KPI } from "@/app/lib/data";
 import { EmptyState } from "@/app/components/ui/EmptyState";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import { INVENTORY_CATEGORIES, INVENTORY_UNITS, STOCK_MOVEMENT_PERIODS, STOCK_MOVEMENT_STATUS } from "@/app/domain/constants";
 
 /* ── Types & Mock Data (unchanged logic) ──────────────────────────── */
 type MovementType = "in" | "out" | "adjustment" | "transfer" | "return";
@@ -84,20 +86,7 @@ interface MovementDetail {
   notes: string;
 }
 
-const CATEGORIES = ["Toner", "Kertas", "Lem", "Tinta", "Sparepart", "Lainnya"];
-const UNITS = ["pcs", "box", "rim", "roll", "liter", "kg"];
-const DATE_PERIODS = ["Semua Periode", "Hari Ini", "Kemarin", "7 Hari Terakhir", "30 Hari Terakhir", "Custom"];
 
-const MOCK_MOVEMENTS: MovementRecord[] = [
-  { id: "mv-1", type: "in", product: "Toner HP 85A", sku: "TN-85A", category: "Toner", qty: 24, unit: "pcs", before: 12, after: 36, operator: "Budi Hartono", date: new Date(2024, 2, 15, 9, 30), ref: "PO-2024-0324", notes: "Pembelian dari supplier utama", status: "completed" },
-  { id: "mv-2", type: "out", product: "Kertas A4 70gr", sku: "KR-A4-70", category: "Kertas", qty: 10, unit: "rim", before: 45, after: 35, operator: "Rini Susanti", date: new Date(2024, 2, 15, 10, 15), ref: "TX-2024-0412", notes: "Transaksi harian kasir 1", status: "completed" },
-  { id: "mv-3", type: "adjustment", product: "Tinta Epson L3110", sku: "TI-EPS-L3", category: "Tinta", qty: -2, unit: "set", before: 8, after: 6, operator: "Ahmad Faiz", date: new Date(2024, 2, 14, 16, 0), ref: "ADJ-2024-0007", notes: "Stok rusak ditemukan saat opname", status: "completed" },
-  { id: "mv-4", type: "transfer", product: "Lem Stick 40gr", sku: "LM-ST-40", category: "Lem", qty: 15, unit: "pcs", before: 30, after: 45, operator: "Dewi Kusuma", date: new Date(2024, 2, 14, 11, 30), ref: "TRF-JKT-BDG-003", notes: "Transfer dari cabang Jakarta ke Bandung", status: "completed" },
-  { id: "mv-5", type: "return", product: "Sparepart Roller", sku: "SP-RL-001", category: "Sparepart", qty: 3, unit: "pcs", before: 7, after: 10, operator: "Budi Hartono", date: new Date(2024, 2, 13, 14, 45), ref: "RET-SUP-009", notes: "Retur barang cacat ke supplier", status: "completed" },
-  { id: "mv-6", type: "in", product: "Kertas F4 80gr", sku: "KR-F4-80", category: "Kertas", qty: 5, unit: "rim", before: 8, after: 13, operator: "Budi Hartono", date: new Date(2024, 2, 13, 8, 0), ref: "PO-2024-0321", notes: "Restock rutin mingguan", status: "completed" },
-  { id: "mv-7", type: "out", product: "Toner HP 85A", sku: "TN-85A", category: "Toner", qty: 2, unit: "pcs", before: 36, after: 34, operator: "Rini Susanti", date: new Date(2024, 2, 15, 11, 0), ref: "TX-2024-0413", notes: "Penjualan walk-in", status: "completed" },
-  { id: "mv-8", type: "adjustment", product: "Kertas A4 70gr", sku: "KR-A4-70", category: "Kertas", qty: 1, unit: "rim", before: 35, after: 36, operator: "Ahmad Faiz", date: new Date(2024, 2, 15, 12, 30), ref: "ADJ-2024-0008", notes: "Koreksi stok setelah penerimaan", status: "pending" },
-];
 
 /* ── Movement type canonical token mapping (replaces TYPE_CONFIG) ───── */
 const TYPE_META: Record<
@@ -118,19 +107,22 @@ const TYPE_META: Record<
 const _today = new Date();
 
 /* ── Zod schema + inferred type (P2-4: RHF migration) ────────────── */
-const movementSchema = z.object({
+type StockMovementTranslate = (key: string, params?: Record<string, string | number>) => string;
+
+const buildMovementSchema = (translate: StockMovementTranslate) => z.object({
   type: z.enum(["in", "out", "adjustment", "transfer", "return"]),
-  product: z.string().min(1, "Nama produk wajib diisi"),
-  sku: z.string().min(1, "SKU wajib diisi"),
+  product: z.string().min(1, translate("sm.validation.product_required")),
+  sku: z.string().min(1, translate("sm.validation.sku_required")),
   category: z.string(),
-  qty: z.coerce.number().min(1, "Kuantitas tidak boleh nol"),
+  qty: z.coerce.number().min(1, translate("sm.validation.qty_nonzero")),
   unit: z.string(),
   ref: z.string().optional(),
-  date: z.string().min(1, "Tanggal wajib diisi"),
+  date: z.string().min(1, translate("sm.validation.date_required")),
   notes: z.string().optional(),
 });
-type MovementFormInput = z.input<typeof movementSchema>;
-type MovementFormValues = z.output<typeof movementSchema>;
+type MovementSchema = ReturnType<typeof buildMovementSchema>;
+type MovementFormInput = z.input<MovementSchema>;
+type MovementFormValues = z.output<MovementSchema>;
 
 /* ── Component ────────────────────────────────────────────────────── */
 export default function StockMovementPage() {
@@ -153,7 +145,7 @@ export default function StockMovementPage() {
     formState: { errors },
     reset: resetForm,
   } = useForm<MovementFormInput, unknown, MovementFormValues>({
-    resolver: zodResolver(movementSchema),
+    resolver: zodResolver(useMemo(() => buildMovementSchema(t), [t])),
     defaultValues: {
       type: "in",
       product: "",
@@ -167,11 +159,21 @@ export default function StockMovementPage() {
     },
   });
   const [isSaving, setIsSaving] = useState(false);
-  const [movements, setMovements] = useState<MovementRecord[]>(MOCK_MOVEMENTS);
+  const [movements, setMovements] = useState<MovementRecord[]>([]);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deletingMovement, setDeletingMovement] = useState<MovementRecord | null>(null);
 
   const PAGE_SIZE = 8;
+
+  /* ---- Demo mode: lazy-load mock movements only when explicitly enabled ---- */
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+    let cancelled = false;
+    void import("@/app/demo/stock-movements").then(({ DEMO_STOCK_MOVEMENTS }) => {
+      if (!cancelled) setMovements(DEMO_STOCK_MOVEMENTS as MovementRecord[]);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   /* ---- effects (unchanged) ---- */
   useEffect(() => {
@@ -430,8 +432,8 @@ export default function StockMovementPage() {
                 className={cn(SELECT.base, SELECT.size.md)}
               >
                 <option value="all">{t("sm.filter.allCategories")}</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                {INVENTORY_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{t(c.labelKey)}</option>
                 ))}
               </select>
             </div>
@@ -448,8 +450,8 @@ export default function StockMovementPage() {
                 onChange={(e) => setDatePeriod(e.target.value)}
                 className={cn(SELECT.base, SELECT.size.md)}
               >
-                {DATE_PERIODS.map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                {STOCK_MOVEMENT_PERIODS.map((p) => (
+                  <option key={p.value} value={p.value}>{t(p.labelKey)}</option>
                 ))}
               </select>
             </div>
@@ -460,12 +462,12 @@ export default function StockMovementPage() {
         <ResponsiveTable
           label={t("sm.header")}
           scrollerClassName="rounded-none border-0 bg-transparent"
-          minWidthClassName="min-w-[1040px]"
+          minWidthClassName={TABLE.minWidth.stockMovement}
         >
           <table className={TABLE.base} aria-label={t("sm.header")}>
             <thead className={TABLE.head}>
               <tr>
-                <th className={cn(TABLE.headCell, TABLE.headCellSortable, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>
+                <th className={cn(TABLE.headCell, TABLE.headCellSortable, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")}>
                   <button
                     type="button"
                     onClick={() => toggleSort("product")}
@@ -540,7 +542,7 @@ export default function StockMovementPage() {
                       aria-label={`Detail ${rec.product} ${t(`sm.type.${rec.type}`)}`}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openDetail(rec); }}
                     >
-                      <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                      <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                         <div className={cn(STACK.compact)}>
                           <p className={cn(T.bodyEmphasis, "text-slate-900 dark:text-slate-100")}>{rec.product}</p>
                           <p className={cn(T.bodySm, "text-slate-400")}>{rec.sku}</p>
@@ -586,7 +588,7 @@ export default function StockMovementPage() {
                       <td className={cn(TABLE.cell, "text-right")}>
                         <div className="flex items-center justify-end gap-2">
                           <span className={cn(BADGE.base, BADGE.size.xs, rec.status === "completed" ? BADGE.variant.success : rec.status === "pending" ? BADGE.variant.warning : BADGE.variant.neutral)}>
-                            {rec.status === "completed" ? "Selesai" : rec.status === "pending" ? "Pending" : "Dibatalkan"}
+                            {rec.status === "completed" ? t("sm.status.completed") : rec.status === "pending" ? t("sm.status.pending") : t("sm.status.cancelled")}
                           </span>
                           <button
                             onClick={(e) => { e.stopPropagation(); confirmDelete(rec); }}
@@ -703,7 +705,7 @@ export default function StockMovementPage() {
             className={cn(
               MODAL.container,
               MODAL.size.lg,
-              "max-h-[90vh] overflow-hidden flex flex-col",
+              "overflow-hidden flex flex-col", MODAL.maxHeight.lg,
               Z.modal,
               "animate-in zoom-in-95 duration-150"
             )}
@@ -717,7 +719,7 @@ export default function StockMovementPage() {
               {/* Modal header */}
               <div className={MODAL.header}>
                 <h2 id="modal-title" className={cn(T.h2, "text-slate-900 dark:text-slate-100")}>
-                  Catat Pergerakan Stok Baru
+                  {t("sm.modal.addTitle")}
                 </h2>
                 <button
                   onClick={() => setIsModalOpen(false)}
@@ -770,7 +772,7 @@ export default function StockMovementPage() {
                       type="text"
                       {...register("product")}
                       className={cn(INPUT.base, INPUT.size.md, "pl-10", errors.product && INPUT.error)}
-                      placeholder="Contoh: Toner HP 85A"
+                      placeholder={t("sm.modal.product_placeholder")}
                     />
                   </div>
                   {errors.product && <p className={cn(T.bodySm, C.destructive.text)}>{errors.product.message}</p>}
@@ -814,8 +816,8 @@ export default function StockMovementPage() {
                       FOCUS.ring
                     )}
                   >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {INVENTORY_CATEGORIES.map((c) => (
+                      <option key={c.value} value={c.value}>{t(c.labelKey)}</option>
                     ))}
                   </select>
                 </div>
@@ -843,7 +845,7 @@ export default function StockMovementPage() {
                       {...register("unit")}
                       className={cn(SELECT.base, SELECT.size.md)}
                     >
-                      {UNITS.map((u) => (
+                      {INVENTORY_UNITS.map((u) => (
                         <option key={u} value={u}>{u}</option>
                       ))}
                     </select>
@@ -870,7 +872,7 @@ export default function StockMovementPage() {
                       "placeholder:text-slate-400",
                       FOCUS.ring
                     )}
-                    placeholder="Contoh: PO-2024-0001"
+                    placeholder={t("sm.modal.ref_placeholder")}
                   />
                 </div>
 
@@ -907,7 +909,7 @@ export default function StockMovementPage() {
                       "placeholder:text-slate-400",
                       FOCUS.ring
                     )}
-                    placeholder="Tambahkan catatan jika diperlukan..."
+                    placeholder={t("sm.modal.notes_placeholder")}
                   />
                 </div>
               </div>
@@ -931,7 +933,7 @@ export default function StockMovementPage() {
                       Menyimpan...
                     </>
                   ) : (
-                    "Simpan Catatan"
+                    t("sm.modal.save_record")
                   )}
                 </button>
               </div>
@@ -1017,7 +1019,7 @@ export default function StockMovementPage() {
                 {/* Stock delta highlight */}
                 <div className={cn("mt-4", PAD.cardCompact, "bg-slate-50 dark:bg-slate-800", R_COMPONENT.card, "flex items-center justify-between")}>
                   <div>
-                    <p className={cn(T.label, "text-slate-400 dark:text-slate-500 mb-1")}>Perubahan Stok</p>
+                    <p className={cn(T.label, "text-slate-400 dark:text-slate-500 mb-1")}>{t("sm.drawer.stockChange")}</p>
                     <p className={cn(T.dataSm, "text-slate-500 dark:text-slate-400")}>{selectedDetail.before} → {selectedDetail.after} {selectedDetail.unit}</p>
                   </div>
                   <p className={cn(T.kpiCard,

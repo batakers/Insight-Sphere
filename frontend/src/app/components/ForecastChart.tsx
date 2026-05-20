@@ -10,6 +10,7 @@ import {
   AreaChart,
 } from "recharts";
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
 import { R } from "@/app/lib/radii";
@@ -17,7 +18,7 @@ import { E } from "@/app/lib/elevation";
 import { formatNumber } from "@/app/lib/format";
 import { Info, Sparkles, TrendingUp, AlertCircle } from "lucide-react";
 import { useTranslation } from "@/app/i18n";
-import { CHART_COLORS } from "@/app/lib/charts";
+import { CHART_COLORS, CHART_HEIGHT, getAxisProps, getChartColors, getGridProps } from "@/app/lib/charts";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/app/components/charts/StableResponsiveContainer";
 
 interface ForecastPoint {
@@ -82,9 +83,9 @@ const CustomTooltip = ({
     const event = payload[0]?.payload.event;
 
     return (
-      <div className={cn(R.xl, E["2xl"], "bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl p-5 border border-slate-100 dark:border-slate-800 min-w-[220px]")}
+      <div className={cn(R.xl, E["2xl"], "bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl p-5 border border-slate-200 dark:border-slate-800 min-w-[220px]")}
       >
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-50">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
            <p className={cn(T.label, "text-slate-900 dark:text-slate-100")}>{label}</p>
            {event && <span className={cn(T.micro, R.sm, "bg-indigo-600 text-white px-2 py-0.5")}>{event}</span>}
         </div>
@@ -93,14 +94,14 @@ const CustomTooltip = ({
           <div className="flex items-center justify-between group">
             <div className="flex items-center gap-2">
                <div className="size-2 rounded-full bg-indigo-600" />
-               <span className={cn(T.label, "text-slate-600")}>{t("chart.tooltip.actual")}</span>
+               <span className={cn(T.label, "text-slate-600 dark:text-slate-400")}>{t("chart.tooltip.actual")}</span>
             </div>
             <span className={cn(T.dataEmphasis, "text-slate-900 dark:text-slate-100")}>{formatNumber(actual ?? 0)} <span className={cn(T.caption, "text-slate-500 capitalize")}>{t("table.unit")}</span></span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
                <div className="size-2 rounded-full bg-emerald-600" />
-               <span className={cn(T.label, "text-slate-600")}>{t("chart.tooltip.ai")}</span>
+               <span className={cn(T.label, "text-slate-600 dark:text-slate-400")}>{t("chart.tooltip.ai")}</span>
             </div>
             <span className={cn(T.dataEmphasis, "text-slate-900 dark:text-slate-100")}>{formatNumber(predicted ?? 0)} <span className={cn(T.caption, "text-slate-500 capitalize")}>{t("table.unit")}</span></span>
           </div>
@@ -126,8 +127,13 @@ const CustomTooltip = ({
 
 export function ForecastChart() {
   const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
   const [range, setRange] = useState("chart.range.14d");
   const [showCI, setShowCI] = useState(true);
+  const chartTheme = resolvedTheme === "dark" ? "dark" : "light";
+  const chartColors = getChartColors(chartTheme);
+  const axisProps = getAxisProps(chartTheme);
+  const gridProps = getGridProps(chartTheme);
   
   const rangeToDays: Record<string, number> = {
     "chart.range.7d": 7,
@@ -186,7 +192,7 @@ export function ForecastChart() {
         </div>
       </div>
 
-      <div className="h-[400px] w-full relative z-10">
+      <div className="w-full relative z-10" style={{ height: CHART_HEIGHT.xl }}>
         <ResponsiveContainer debounce={200} width="100%" height="100%">
           <AreaChart data={data} margin={{ left: -10, bottom: 20 }}>
             <defs>
@@ -195,21 +201,19 @@ export function ForecastChart() {
                 <stop offset="95%" stopColor={CHART_COLORS.primary.light} stopOpacity={0.02}/>
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="5 5" vertical={false} stroke={CHART_COLORS.grid.light} />
+            <CartesianGrid {...gridProps} strokeDasharray="5 5" />
             <XAxis 
               dataKey="name" 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fill: CHART_COLORS.axis.tickLight, fontSize: 10, fontWeight: 900 }}
+              {...axisProps}
+              tick={{ ...axisProps.tick, fontSize: 10, fontWeight: 900 }}
               dy={20}
             />
             <YAxis 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fill: CHART_COLORS.axis.tickLight, fontSize: 10, fontWeight: 900 }}
+              {...axisProps}
+              tick={{ ...axisProps.tick, fontSize: 10, fontWeight: 900 }}
               dx={-10}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: CHART_COLORS.grid.light, strokeWidth: 1 }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ stroke: chartColors.cursorLine, strokeWidth: 1 }} />
             
             {/* Confidence Interval Area */}
             {showCI && (
@@ -257,15 +261,15 @@ export function ForecastChart() {
          <div className="flex flex-wrap items-center gap-6">
             <div className="flex items-center gap-2">
                <div className="size-3 rounded-full border-2 border-indigo-600" />
-               <span className={cn(T.caption, "text-slate-600")}>{t("chart.legend.actual")}</span>
+               <span className={cn(T.caption, "text-slate-600 dark:text-slate-400")}>{t("chart.legend.actual")}</span>
             </div>
             <div className="flex items-center gap-2">
                <div className="w-3 h-1 bg-emerald-600 rounded-full" />
-               <span className={cn(T.caption, "text-slate-600")}>{t("chart.legend.ai")}</span>
+               <span className={cn(T.caption, "text-slate-600 dark:text-slate-400")}>{t("chart.legend.ai")}</span>
             </div>
             <div className="flex items-center gap-2">
                <div className="size-3 bg-indigo-100 rounded-sm" />
-               <span className={cn(T.caption, "text-slate-600")}>{t("chart.legend.ci")}</span>
+               <span className={cn(T.caption, "text-slate-600 dark:text-slate-400")}>{t("chart.legend.ci")}</span>
             </div>
          </div>
          <p className={cn(T.caption, "text-slate-500 italic")}>

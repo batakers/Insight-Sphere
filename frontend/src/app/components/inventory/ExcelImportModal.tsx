@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   X, Upload, Download, CheckCircle2, AlertTriangle, AlertCircle,
   FileSpreadsheet, ArrowRight, Package, RefreshCw, Check, XCircle,
@@ -10,11 +10,13 @@ import { T } from "@/app/lib/typography";
 import { TABLE } from "@/app/lib/data";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
+import { MODAL } from "@/app/lib/containers";
 import { E, Z } from "@/app/lib/elevation";
 import { formatRupiah } from "@/app/lib/format";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { toast } from "sonner";
 import { useTranslation } from "@/app/i18n";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
 export interface ImportProductRow {
   sku: string;
@@ -31,25 +33,15 @@ interface PreviewRow extends ImportProductRow {
   errors: string[];
 }
 
-const MOCK_PREVIEW: PreviewRow[] = [
-  { sku: "KRT-001", name: "Kertas HVS A4 70gr",    category: "Kertas",   unit: "Rim",   stock: 50, price:  55000, minStock: 10, supplier: "CV Aneka",  errors: [] },
-  { sku: "KRT-002", name: "Kertas HVS F4 80gr",    category: "Kertas",   unit: "Rim",   stock: 30, price:  62000, minStock:  8,                         errors: [] },
-  { sku: "TNR-001", name: "Toner HP LaserJet 85A", category: "Tinta",    unit: "Botol", stock:  3, price: 280000, minStock:  2, supplier: "HP Store",   errors: [] },
-  { sku: "LMN-001", name: "Plastik Laminasi A4",   category: "Laminasi", unit: "Pack",  stock: 10, price:  45000, minStock:  3,                         errors: [] },
-  { sku: "SPR-001", name: "Spiral Binding 8mm",    category: "Jilid",    unit: "Box",   stock:  8, price:  35000, minStock:  2,                         errors: [] },
-  { sku: "MAP-001", name: "Map Plastik Bening A4", category: "Lainnya",  unit: "Pack",  stock: 20, price:  18000, minStock:  5,                         errors: [] },
-  { sku: "",        name: "Kertas A3 80gr",         category: "Kertas",   unit: "Rim",   stock: 15, price:      0, minStock:  5,                         errors: ["SKU kosong", "Harga tidak valid"] },
-];
-
 const COLUMNS = [
-  { name: "SKU",         req: true  },
-  { name: "Nama Produk", req: true  },
-  { name: "Kategori",    req: false },
-  { name: "Satuan",      req: false },
-  { name: "Stok",        req: true  },
-  { name: "Harga Jual",  req: true  },
-  { name: "Min Stok",    req: false },
-  { name: "Supplier",    req: false },
+  { key: "sku",      labelKey: "inv.excel.column.sku",          req: true  },
+  { key: "name",     labelKey: "inv.excel.column.product_name", req: true  },
+  { key: "category", labelKey: "inv.excel.column.category",     req: false },
+  { key: "unit",     labelKey: "inv.excel.column.unit",         req: false },
+  { key: "stock",    labelKey: "inv.excel.column.stock",        req: true  },
+  { key: "price",    labelKey: "inv.excel.column.sell_price",   req: true  },
+  { key: "minStock", labelKey: "inv.excel.column.min_stock",    req: false },
+  { key: "supplier", labelKey: "inv.excel.column.supplier",     req: false },
 ];
 
 interface Props {
@@ -64,12 +56,40 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
   const [isDragging, setDrag]   = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsing, setParsing]   = useState(false);
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/excel-import-preview").then(({ DEMO_EXCEL_IMPORT_PREVIEW }) => {
+      if (!cancelled) setPreviewRows(DEMO_EXCEL_IMPORT_PREVIEW);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!isOpen) return null;
 
-  const valid  = MOCK_PREVIEW.filter(r => r.errors.length === 0);
-  const errors = MOCK_PREVIEW.filter(r => r.errors.length >  0);
+  const valid  = previewRows.filter(r => r.errors.length === 0);
+  const errors = previewRows.filter(r => r.errors.length >  0);
+  const stepLabel =
+    step === 1 ? t("inv.excel.step.upload") :
+    step === 2 ? t("inv.excel.step.preview") :
+    t("inv.excel.step.importing");
+  const previewHeaders = [
+    { key: "row", label: t("inv.excel.column.row") },
+    { key: "sku", label: t("inv.excel.column.sku") },
+    { key: "name", label: t("inv.excel.column.product_name") },
+    { key: "category", label: t("inv.excel.column.category") },
+    { key: "stock", label: t("inv.excel.column.stock") },
+    { key: "price", label: t("inv.excel.column.price") },
+    { key: "supplier", label: t("inv.excel.column.supplier") },
+    { key: "status", label: t("inv.excel.column.status") },
+  ];
 
   const handleFile = (file: File) => {
     setFileName(file.name);
@@ -87,10 +107,7 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
     setStep(3);
     setTimeout(() => {
       onImport(valid);
-      toast.success(
-        `${valid.length} produk berhasil diimport` +
-        (errors.length ? `, ${errors.length} baris dilewati` : "")
-      );
+      toast.success(t("inv.excel.toast.import_done", { valid: valid.length, skipped: errors.length }));
       handleReset();
     }, 1600);
   };
@@ -101,7 +118,7 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
 
   return (
     <div className={cn(Z.modal, "fixed inset-0 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200")}>
-      <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-2xl border border-slate-200 dark:border-slate-700 animate-in slide-in-from-bottom-4 duration-300 flex flex-col max-h-[90vh]")}>
+      <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-2xl border border-slate-200 dark:border-slate-700 animate-in slide-in-from-bottom-4 duration-300 flex flex-col", MODAL.maxHeight.lg)}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -111,10 +128,10 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
             </div>
             <div>
               <h3 className={cn(T.h3, "text-slate-900 dark:text-slate-100")}>
-                Import Produk dari Excel
+                {t("inv.excel.title")}
               </h3>
               <p className={cn(T.caption, "text-slate-400")}>
-                Langkah {step} — {step === 1 ? "Upload File" : step === 2 ? "Preview & Validasi" : "Mengimport..."}
+                {t("inv.excel.step_label", { step, label: stepLabel })}
               </p>
             </div>
           </div>
@@ -137,7 +154,7 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
                   : step === s ? "bg-slate-900 dark:bg-indigo-600 text-white"
                   : "bg-slate-100 dark:bg-slate-800 text-slate-400"
                 )}>
-                  {step > s ? <Check className="size-3.5" aria-label="Selesai" /> : s}
+                  {step > s ? <Check className="size-3.5" aria-label={t("common.completed")} /> : s}
                 </div>
                 {i < 2 && (
                   <div className={cn(
@@ -177,10 +194,10 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
                   : <Upload className="size-9 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
                 }
                 <p className={cn(T.body, "font-bold text-slate-600 dark:text-slate-400")}>
-                  {parsing ? "Membaca file..." : "Drag & drop file, atau klik untuk pilih"}
+                  {parsing ? t("inv.excel.drop.reading") : t("inv.excel.drop.prompt")}
                 </p>
                 <p className={cn(T.caption, "text-slate-400 mt-1.5")}>
-                  Mendukung · .xlsx · .xls · .csv
+                  {t("inv.excel.supported")}
                 </p>
               </div>
 
@@ -188,36 +205,36 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
               <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-900/40">
                 <Download className={cn("size-4 shrink-0", C.warning.icon)} />
                 <div className="flex-1 min-w-0">
-                  <p className={cn(T.bodySm, "font-bold", C.warning.text)}>Download Template Excel</p>
+                  <p className={cn(T.bodySm, "font-bold", C.warning.text)}>{t("inv.excel.template.title")}</p>
                   <p className={cn(T.caption, "text-amber-500/80 mt-0.5")}>
-                    Gunakan template resmi agar kolom terbaca otomatis
+                    {t("inv.excel.template.desc")}
                   </p>
                 </div>
                 <button
                   onClick={e => { e.stopPropagation(); toast.success(t("inv.excel.toast.template")); }}
                   className={cn(T.buttonSm, R.sm, "px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white cursor-pointer transition-all shrink-0")}
                 >
-                  Unduh
+                  {t("inv.excel.template.download")}
                 </button>
               </div>
 
               {/* Column legend */}
               <div className="space-y-2">
-                <p className={cn(T.label, "text-slate-400")}>Kolom yang dikenali:</p>
+                <p className={cn(T.label, "text-slate-400")}>{t("inv.excel.columns.recognized")}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {COLUMNS.map(c => (
-                    <span key={c.name} className={cn(
+                    <span key={c.key} className={cn(
                       T.micro, R.xs, "px-2 py-0.5 border",
                       c.req
                         ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-transparent"
                         : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
                     )}>
-                      {c.name}{c.req ? " *" : ""}
+                      {t(c.labelKey)}{c.req ? " *" : ""}
                     </span>
                   ))}
                 </div>
                 <p className={cn(T.caption, "text-slate-400")}>
-                  * wajib diisi · kolom lain opsional (boleh kosong)
+                  {t("inv.excel.columns.required_note")}
                 </p>
               </div>
             </div>
@@ -230,35 +247,35 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
                 <div className="flex items-center gap-2 min-w-0">
                   <FileSpreadsheet className={cn("size-4 shrink-0", C.success.icon)} />
                   <span className={cn(T.bodySm, "font-bold text-slate-700 dark:text-slate-300 truncate")}>{fileName}</span>
-                  <span className={cn(T.caption, "font-bold text-slate-400 shrink-0")}>{MOCK_PREVIEW.length} baris</span>
+                  <span className={cn(T.caption, "font-bold text-slate-400 shrink-0")}>{t("inv.excel.rows", { count: previewRows.length })}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={cn(T.micro, R.xs, "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 border border-emerald-100 dark:border-emerald-900/40 inline-flex items-center gap-1")}>
-                    <CheckCircle2 className="size-3" aria-hidden="true" /> {valid.length} valid
+                    <CheckCircle2 className="size-3" aria-hidden="true" /> {t("inv.excel.valid", { count: valid.length })}
                   </span>
                   {errors.length > 0 && (
                     <span className={cn(T.micro, R.xs, "text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-2 py-0.5 border border-rose-100 dark:border-rose-900/40 inline-flex items-center gap-1")}>
-                      <AlertCircle className="size-3" aria-hidden="true" /> {errors.length} error
+                      <AlertCircle className="size-3" aria-hidden="true" /> {t("inv.excel.error", { count: errors.length })}
                     </span>
                   )}
                 </div>
               </div>
 
               <ResponsiveTable
-                label="Preview import produk"
+                label={t("a11y.table.import_preview")}
                 scrollerClassName="rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900"
                 minWidthClassName="min-w-[920px]"
               >
-                <table className={TABLE.base} aria-label="Preview import produk">
+                <table className={TABLE.base} aria-label={t("a11y.table.import_preview")}>
                   <thead className={TABLE.head}>
                     <tr>
-                      {["#","SKU","Nama Produk","Kategori","Stok","Harga","Supplier","Status"].map((h, index) => (
-                        <th key={h} className={cn(TABLE.headCell, "px-3 py-2.5", index === 0 && "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>{h}</th>
+                      {previewHeaders.map((h, index) => (
+                        <th key={h.key} className={cn(TABLE.headCell, "px-3 py-2.5", index === 0 && "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>{h.label}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className={TABLE.body}>
-                    {MOCK_PREVIEW.map((row, i) => {
+                    {previewRows.map((row, i) => {
                       const hasErrors = row.errors.length > 0;
                       return (
                         <tr
@@ -297,7 +314,7 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
                           <td className={cn(TABLE.cell, "px-3 py-2.5")}>
                             {row.errors.length === 0 ? (
                               <span className={cn(T.micro, R.xs, "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 inline-flex items-center gap-1")}>
-                                <CheckCircle2 className="size-3" aria-hidden="true" /> Valid
+                                <CheckCircle2 className="size-3" aria-hidden="true" /> {t("inv.excel.valid_status")}
                               </span>
                             ) : (
                               <div className="space-y-0.5">
@@ -320,7 +337,7 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
                 <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-900/40">
                   <AlertTriangle className={cn("size-4 shrink-0 mt-px", C.warning.icon)} />
                   <p className={cn(T.bodySm, "font-bold", C.warning.text)}>
-                    {errors.length} baris akan dilewati karena ada error. Lanjutkan import dengan <span className="text-slate-900 dark:text-slate-200">{valid.length} produk valid</span>, atau perbaiki file dan upload ulang.
+                    {t("inv.excel.warning", { skipped: errors.length, valid: valid.length })}
                   </p>
                 </div>
               )}
@@ -335,9 +352,9 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
               </div>
               <div className="text-center">
                 <p className={cn(T.bodyEmphasis, "text-slate-900 dark:text-slate-100")}>
-                  Mengimport {valid.length} produk...
+                  {t("inv.excel.importing_count", { count: valid.length })}
                 </p>
-                <p className={cn(T.bodySm, "text-slate-400 mt-1")}>Menyimpan data ke inventaris</p>
+                <p className={cn(T.bodySm, "text-slate-400 mt-1")}>{t("inv.excel.saving")}</p>
               </div>
               <div className="w-48 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div className="h-full bg-indigo-500 rounded-full animate-[progress_1.6s_ease-in-out_forwards]" />
@@ -353,14 +370,14 @@ export function ExcelImportModal({ isOpen, onClose, onImport }: Props) {
               onClick={step === 1 ? handleReset : () => setStep(1)}
               className={cn(T.buttonSm, R.md, "px-4 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-all")}
             >
-              {step === 1 ? "Batal" : "← Kembali"}
+              {step === 1 ? t("common.cancel") : t("common.back")}
             </button>
             {step === 2 && (
               <button
                 onClick={handleImport}
                 className={cn(T.buttonSm, R.md, E.glowSuccess, "flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer transition-all")}
               >
-                Import {valid.length} Produk <ArrowRight className="size-3.5" />
+                {t("inv.excel.import_button", { count: valid.length })} <ArrowRight className="size-3.5" />
               </button>
             )}
           </div>

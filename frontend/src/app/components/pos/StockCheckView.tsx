@@ -79,7 +79,7 @@ export function StockCheckView() {
                    const isEmpty = product.current_stock <= 0;
                    
                    return (
-                      <div key={product.id} className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl dark:hover:shadow-slate-900/50 transition-all group">
+                      <div key={product.id} className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl dark:hover:shadow-slate-900/50 transition-all group">
                          <div className="flex justify-between items-start mb-4">
                             <div className={cn(R.lg, "size-12 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300 dark:text-slate-600 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 group-hover:text-indigo-400 transition-colors")}>
                                <Package className="size-6" />

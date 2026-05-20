@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import {
   BarChart,
   Bar,
@@ -20,41 +21,50 @@ import { A11Y } from "@/app/lib/a11y";
 import { formatRupiah } from "@/app/lib/format";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
-import { CHART_COLORS } from "@/app/lib/charts";
+import { CHART_COLORS, CHART_HEIGHT, getAxisProps, getTooltipContentStyle } from "@/app/lib/charts";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/app/components/charts/StableResponsiveContainer";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
 type Period = "daily" | "weekly" | "monthly";
 
-const MOCK_DATA: Record<Period, { name: string; qtySold: number; revenue: number; pct: number; change: number }[]> = {
-  daily: [
-    { name: "Beras Premium 5kg", qtySold: 45, revenue: 2925000, pct: 30.1, change: 8.3 },
-    { name: "Teh Botol Sosro", qtySold: 38, revenue: 209000, pct: 22.4, change: 5.1 },
-    { name: "Indomie Goreng", qtySold: 24, revenue: 2760000, pct: 14.2, change: 18.5 },
-    { name: "Susu Ultra 1L", qtySold: 21, revenue: 388500, pct: 12.6, change: -1.2 },
-    { name: "Minyak SunCo 2L", qtySold: 18, revenue: 684000, pct: 10.8, change: 0.0 },
-  ],
-  weekly: [
-    { name: "Beras Premium 5kg", qtySold: 320, revenue: 20800000, pct: 28.5, change: 12.5 },
-    { name: "Teh Botol Sosro", qtySold: 280, revenue: 1540000, pct: 21.2, change: 8.2 },
-    { name: "Susu Ultra 1L", qtySold: 195, revenue: 3607500, pct: 14.9, change: -2.4 },
-    { name: "Indomie Goreng", qtySold: 170, revenue: 19550000, pct: 13.1, change: 15.0 },
-    { name: "Minyak SunCo 2L", qtySold: 148, revenue: 5624000, pct: 11.3, change: 0.0 },
-  ],
-  monthly: [
-    { name: "Beras Premium 5kg", qtySold: 1280, revenue: 83200000, pct: 27.8, change: 6.4 },
-    { name: "Susu Ultra 1L", qtySold: 960, revenue: 17760000, pct: 20.8, change: 11.2 },
-    { name: "Teh Botol Sosro", qtySold: 870, revenue: 4785000, pct: 18.9, change: 3.7 },
-    { name: "Indomie Goreng", qtySold: 620, revenue: 71300000, pct: 13.5, change: -4.1 },
-    { name: "Chitato Original", qtySold: 510, revenue: 6120000, pct: 11.1, change: 22.3 },
-  ],
+type TopProduct = {
+  name: string;
+  qtySold: number;
+  revenue: number;
+  pct: number;
+  change: number;
+};
+
+const EMPTY_TOP_PRODUCTS: Record<Period, TopProduct[]> = {
+  daily: [],
+  weekly: [],
+  monthly: [],
 };
 
 export function TopProductsChart() {
   const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
   const [period, setPeriod] = useState<Period>("weekly");
+  const [topProductsData, setTopProductsData] = useState<Record<Period, TopProduct[]>>(EMPTY_TOP_PRODUCTS);
   const barColors = CHART_COLORS.series;
+  const chartTheme = resolvedTheme === "dark" ? "dark" : "light";
+  const axisProps = getAxisProps(chartTheme);
+  const tooltipStyle = getTooltipContentStyle(chartTheme);
 
-  const data = MOCK_DATA[period];
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/top-products").then(({ DEMO_TOP_PRODUCTS }) => {
+      if (!cancelled) setTopProductsData(DEMO_TOP_PRODUCTS);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = topProductsData[period];
 
   return (
     <div className={cn(R_COMPONENT.card, E.sm, "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 overflow-hidden")}>
@@ -70,7 +80,7 @@ export function TopProductsChart() {
               type="button"
               onClick={() => setPeriod(p)}
               className={cn(
-                T.buttonSm, R.sm, "px-3 py-1 transition-all cursor-pointer",
+                T.buttonSm, R.sm, A11Y.tapTarget, "px-3 py-1 transition-all cursor-pointer",
                 A11Y.focusRing.default,
                 period === p
                   ? "bg-white dark:bg-slate-900 text-indigo-600 shadow-sm"
@@ -86,25 +96,22 @@ export function TopProductsChart() {
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-0">
         {/* Chart */}
         <div className="xl:col-span-2 p-4 border-r border-slate-50 dark:border-slate-800">
-          <div className="h-[220px]">
+          <div style={{ height: CHART_HEIGHT.sm }}>
             <ResponsiveContainer debounce={200} width="100%" height="100%">
               <BarChart data={data} layout="vertical" margin={{ left: 0 }}>
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="name"
                   type="category"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: CHART_COLORS.axis.tickLight, fontSize: 9, fontWeight: 800 }}
+                  {...axisProps}
+                  tick={{ ...axisProps.tick, fontSize: 9, fontWeight: 800 }}
                   width={100}
                 />
                 <Tooltip
                   cursor={{ fill: "transparent" }}
                   contentStyle={{
+                    ...tooltipStyle,
                     borderRadius: "0.5rem",
-                    border: "none",
-                    background: CHART_COLORS.tooltip.bgDark,
-                    color: CHART_COLORS.tooltip.foregroundDark,
                     fontSize: "9px",
                   }}
                   formatter={(value) => [`${value} unit`, t("dash.top.qty_sold")]}
@@ -124,12 +131,12 @@ export function TopProductsChart() {
           <ResponsiveTable
             label={t("dash.section.top_products")}
             scrollerClassName="rounded-none border-0 bg-transparent"
-            minWidthClassName="min-w-[620px]"
+            minWidthClassName={TABLE.minWidth.topProducts}
           >
             <table className={TABLE.base} aria-label={t("dash.section.top_products")}>
               <thead className={TABLE.head}>
                 <tr>
-                  <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50 py-2.5")}>{t("pred.table.product")}</th>
+                  <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50 py-2.5")}>{t("pred.table.product")}</th>
                   <th className={cn(TABLE.headCellNumeric, "py-2.5")}>{t("dash.top.qty_sold")}</th>
                   <th className={cn(TABLE.headCellNumeric, "py-2.5")}>{t("dash.top.revenue")}</th>
                   <th className={cn(TABLE.headCellNumeric, "py-2.5")}>{t("dash.top.pct")}</th>
@@ -138,7 +145,7 @@ export function TopProductsChart() {
               <tbody className={TABLE.body}>
                 {data.map((p: typeof data[0], i: number) => (
                   <tr key={p.name} className={cn(TABLE.row, TABLE.rowHover, "group")}>
-                    <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white py-2.5 dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                    <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white py-2.5 dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                       <div className="flex items-center gap-2">
                         <span className={cn(T.dataSm, R.xs, "size-5 flex items-center justify-center font-semibold text-white shrink-0")} style={{ backgroundColor: barColors[i] }}>
                           {i + 1}

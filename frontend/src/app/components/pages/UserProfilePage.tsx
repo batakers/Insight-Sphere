@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import * as authClient from "@/app/lib/auth-client";
+import { ApiError } from "@/app/lib/api";
 import {
   User, MapPin, Mail, Phone, Calendar, ShieldCheck, Trophy,
   TrendingUp, Activity, History, Edit2, Lock,
@@ -10,21 +13,32 @@ import {
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
-import { R } from "@/app/lib/radii";
 import { ICON } from "@/app/lib/spacing";
 import { BADGE } from "@/app/lib/data";
 import { getRoleInfo } from "@/app/lib/status";
 import { useTranslation } from "@/app/i18n";
 import { useAuth } from "@/app/context/AuthContext";
 import { toast } from "sonner";
+import { UserProfileSkeleton } from "@/app/components/Skeletons";
+import { A11Y } from "@/app/lib/a11y";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
+type ExtendedProfile = {
+  email: string;
+  phone: string;
+  positionKey: string;
+  location: string;
+  joinDate: string;
+};
 
-// ---- Mock extended profile (fields not yet in AuthContext) ----
-const MOCK_EXTENDED: Record<string, { email: string; phone: string; position: string; location: string; joinDate: string }> = {
-  default: { email: "user@insightsphere.id",    phone: "081234567890", position: "Staff",                 location: "Jakarta, ID", joinDate: "01 Jan 2024" },
-  admin:   { email: "admin@insightsphere.id",   phone: "081234567890", position: "System Administrator",  location: "Jakarta, ID", joinDate: "01 Jan 2024" },
-  owner:   { email: "owner@insightsphere.id",   phone: "082345678901", position: "Store Owner",           location: "Jakarta, ID", joinDate: "01 Feb 2024" },
-  cashier: { email: "kasir@insightsphere.id",   phone: "083456789012", position: "Kasir",                 location: "Jakarta, ID", joinDate: "01 Mar 2024" },
+const EMPTY_EXTENDED_PROFILE: Record<string, ExtendedProfile> = {
+  default: {
+    email: "",
+    phone: "",
+    positionKey: "prof.position.staff",
+    location: "",
+    joinDate: "-",
+  },
 };
 
 interface ProfileForm {
@@ -38,17 +52,21 @@ interface ProfileForm {
 export function UserProfilePage() {
   const { t } = useTranslation();
   const { user, actualRole, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const [extendedProfiles, setExtendedProfiles] = useState<Record<string, ExtendedProfile>>(EMPTY_EXTENDED_PROFILE);
 
-  const extended = MOCK_EXTENDED[actualRole ?? "default"] ?? MOCK_EXTENDED.default;
+  const extended = extendedProfiles[actualRole ?? "default"] ?? extendedProfiles.default;
+
+  const realProfile: ProfileForm = {
+    name: user?.name ?? t("prof.default_name"),
+    email: user?.email ?? extended.email,
+    phone: user?.phone ?? extended.phone,
+    position: user?.position ?? t(extended.positionKey),
+    location: user?.storeNbr ? `Toko #${user.storeNbr}` : extended.location,
+  };
 
   // ---- Local editable state ----
-  const [profile, setProfile] = useState<ProfileForm>({
-    name: user?.name ?? "User",
-    email: extended.email,
-    phone: extended.phone,
-    position: extended.position,
-    location: extended.location,
-  });
+  const [profile, setProfile] = useState<ProfileForm>(realProfile);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar ?? null);
   const [twoFaEnabled, setTwoFaEnabled] = useState(user?.twoFactorEnabled ?? false);
   const [compactMode, setCompactMode] = useState(false);
@@ -60,6 +78,45 @@ export function UserProfilePage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<ProfileForm>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsDataLoading(false), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/user-profile").then(({ DEMO_USER_PROFILE }) => {
+      if (!cancelled) setExtendedProfiles(DEMO_USER_PROFILE);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setProfile({
+      name: user?.name ?? t("prof.default_name"),
+      email: user?.email ?? extended.email,
+      phone: user?.phone ?? extended.phone,
+      position: user?.position ?? t(extended.positionKey),
+      location: user?.storeNbr ? `Toko #${user.storeNbr}` : extended.location,
+    });
+    setAvatarUrl(user?.avatar ?? null);
+    setTwoFaEnabled(user?.twoFactorEnabled ?? false);
+  }, [user?.name, user?.email, user?.phone, user?.position, user?.storeNbr, user?.avatar, user?.twoFactorEnabled, extended.email, extended.location, extended.phone, extended.positionKey, t]);
+
+  if (isDataLoading) {
+    return (
+      <div className="space-y-6 pb-6 animate-in fade-in duration-300">
+        <UserProfileSkeleton />
+      </div>
+    );
+  }
 
   const openEdit = () => {
     setForm(profile);
@@ -70,9 +127,9 @@ export function UserProfilePage() {
 
   const validate = (): boolean => {
     const e: Partial<ProfileForm> = {};
-    if (!form.name.trim()) e.name = "Nama tidak boleh kosong";
-    if (!form.email.includes("@")) e.email = "Email tidak valid";
-    if (form.phone && !/^[0-9+\-\s]{8,15}$/.test(form.phone)) e.phone = "Nomor telepon tidak valid";
+    if (!form.name.trim()) e.name = t("prof.validation.name_required");
+    if (form.email && !form.email.includes("@")) e.email = t("prof.validation.email_invalid");
+    if (form.phone && !/^[0-9+\-\s]{8,15}$/.test(form.phone)) e.phone = t("prof.validation.phone_invalid");
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -80,12 +137,24 @@ export function UserProfilePage() {
   const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
-    await new Promise(r => setTimeout(r, 900));
-    setProfile(form);
-    setAvatarUrl(formAvatar);
-    setSaving(false);
-    setEditOpen(false);
-    toast.success(t("prof.toast.updated"));
+    try {
+      const updated = await authClient.updateMe({
+        full_name: form.name.trim(),
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        position: form.position.trim() || null,
+        avatar_url: formAvatar,
+      });
+      queryClient.setQueryData(["auth", "me"], updated);
+      setProfile(form);
+      setAvatarUrl(formAvatar);
+      setEditOpen(false);
+      toast.success(t("prof.toast.updated"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("common.error"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,11 +174,11 @@ export function UserProfilePage() {
   const roleInfo = getRoleInfo(role);
 
   const activityLogs = [
-    { action: "Override Forecast", target: "Kertas HVS A4 70gr", time: "10 mnt lalu", importance: "High" },
-    { action: "Ekspor Laporan Mingguan", target: "Cabang Pusat", time: "2 jam lalu", importance: "Low" },
-    { action: "Update Stok Fisik", target: "Tinta Epson 003 Black", time: "Kemarin, 14:20", importance: "Medium" },
-    { action: "Login Sistem", target: "Desktop · Chrome", time: "Kemarin, 08:00", importance: "Low" },
-    { action: "Tambah Produk Baru", target: "Laminating Pouch A4", time: "2 hari lalu", importance: "Medium" },
+    { action: t("prof.activity.override_forecast"), target: "Kertas HVS A4 70gr", time: t("prof.activity.time_10m"), importance: "high" },
+    { action: t("prof.activity.weekly_report_export"), target: "Cabang Pusat", time: t("prof.activity.time_2h"), importance: "low" },
+    { action: t("prof.activity.stock_update"), target: "Tinta Epson 003 Black", time: t("prof.activity.time_yesterday_1420"), importance: "medium" },
+    { action: t("prof.activity.system_login"), target: "Desktop · Chrome", time: t("prof.activity.time_yesterday_0800"), importance: "low" },
+    { action: t("prof.activity.product_added"), target: "Laminating Pouch A4", time: t("prof.activity.time_2d"), importance: "medium" },
   ];
 
   const achievements = [
@@ -138,7 +207,7 @@ export function UserProfilePage() {
               <div className="relative group">
                 <div className="w-24 h-24 rounded-2xl bg-white dark:bg-slate-800 border-4 border-white dark:border-slate-800 shadow-xl flex items-center justify-center overflow-hidden ring-1 ring-slate-100 dark:ring-slate-700">
                   {avatarUrl
-                    ? <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ? <img src={avatarUrl} alt={t("prof.avatar.alt")} className="w-full h-full object-cover" />
                     : <div className="w-full h-full bg-slate-900 dark:bg-slate-700 flex items-center justify-center">
                         <User className="w-9 h-9 text-white" />
                       </div>
@@ -171,7 +240,7 @@ export function UserProfilePage() {
               <button
                 onClick={handleLogout}
                 className={cn(T.buttonSm, "flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all cursor-pointer")}>
-                <LogOut className={ICON.sm} /> Keluar
+                <LogOut className={ICON.sm} /> {t("pos.logout")}
               </button>
             </div>
           </div>
@@ -179,10 +248,10 @@ export function UserProfilePage() {
           {/* Info row */}
           <div className="flex flex-wrap gap-4 mt-5 pt-5 border-t border-slate-100 dark:border-slate-800">
             {[
-              { icon: Phone, label: "Telepon", val: profile.phone },
-              { icon: Calendar, label: "Bergabung", val: extended.joinDate },
-              { icon: KeyRound, label: "Username", val: user?.username ?? "-" },
-              { icon: Shield, label: "2FA", val: twoFaEnabled ? "Aktif" : "Nonaktif", color: twoFaEnabled ? C.success.icon : "text-slate-400" },
+              { icon: Phone, label: t("prof.info.phone"), val: profile.phone },
+              { icon: Calendar, label: t("prof.info.joined"), val: extended.joinDate },
+              { icon: KeyRound, label: t("prof.info.username"), val: user?.username ?? "-" },
+              { icon: Shield, label: t("prof.info.twofa"), val: twoFaEnabled ? t("set.access.active") : t("set.access.inactive"), color: twoFaEnabled ? C.success.icon : "text-slate-400" },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2">
                 <item.icon className={cn(ICON.sm, "text-slate-400 dark:text-slate-500 shrink-0")} />
@@ -208,7 +277,6 @@ export function UserProfilePage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { label: t("prof.metric.accuracy"), value: "+4.2%", sub: "vs bulan lalu", color: C.success.icon },
                 { label: t("prof.metric.accuracy"), value: "+4.2%", sub: t("prof.metric.vs_last"), color: C.success.icon },
                 { label: t("prof.metric.alerts"), value: "158", sub: t("prof.metric.processed"), color: "text-slate-900 dark:text-slate-100" },
                 { label: t("prof.metric.audit"), value: "98/100", sub: t("prof.metric.internal_score"), color: C.primary.icon },
@@ -240,8 +308,8 @@ export function UserProfilePage() {
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                      log.importance === "High" ? `${C.destructive.bg} ${C.destructive.icon}` :
-                      log.importance === "Medium" ? `${C.warning.bg} ${C.warning.icon}` :
+                      log.importance === "high" ? `${C.destructive.bg} ${C.destructive.icon}` :
+                      log.importance === "medium" ? `${C.warning.bg} ${C.warning.icon}` :
                       "bg-slate-50 text-slate-400 dark:bg-slate-700"
                     )}>
                       <Activity className="w-4 h-4" />
@@ -252,7 +320,7 @@ export function UserProfilePage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {log.importance === "High" && <AlertTriangle className="w-3 h-3 text-rose-400" />}
+                    {log.importance === "high" && <AlertTriangle className="w-3 h-3 text-rose-400" />}
                     <span className={cn(T.caption, "text-slate-300 dark:text-slate-600")}>{log.time}</span>
                   </div>
                 </div>
@@ -304,16 +372,16 @@ export function UserProfilePage() {
                 <div>
                   <p className={cn(T.label, "text-slate-300")}>{t("prof.security.2fa")}</p>
                   <p className={cn(T.caption, "mt-0.5", twoFaEnabled ? "text-emerald-400" : "text-slate-500")}>
-                    {twoFaEnabled ? "Aktif & terlindungi" : "Belum diaktifkan"}
+                    {twoFaEnabled ? t("prof.security.2fa_enabled") : t("prof.security.2fa_disabled")}
                   </p>
                 </div>
                 <button
                   onClick={() => {
                     setTwoFaEnabled(v => !v);
-                    toast.success(twoFaEnabled ? "2FA dinonaktifkan" : "2FA diaktifkan");
+                    toast.success(twoFaEnabled ? t("prof.security.2fa_deactivated") : t("prof.security.2fa_activated"));
                   }}
-                  className="relative shrink-0 cursor-pointer"
-                  aria-label="Toggle 2FA"
+                  className={cn(A11Y.tapTarget, "relative shrink-0 cursor-pointer")}
+                  aria-label={t("prof.security.toggle_2fa")}
                 >
                   <div className={cn("w-9 h-5 rounded-full transition-colors duration-200", twoFaEnabled ? "bg-emerald-500" : "bg-white/10")}>
                     <div className={cn("absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200", twoFaEnabled ? "right-0.5" : "left-0.5")} />
@@ -325,12 +393,12 @@ export function UserProfilePage() {
               <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl border border-white/5 hover:bg-white/8 transition-colors">
                 <div>
                   <p className={cn(T.label, "text-slate-300")}>{t("prof.security.compact")}</p>
-                  <p className={cn(T.caption, "text-slate-500 mt-0.5")}>Mode tampilan ringkas</p>
+                  <p className={cn(T.caption, "text-slate-500 mt-0.5")}>{t("prof.security.compact_desc")}</p>
                 </div>
                 <button
                   onClick={() => setCompactMode(v => !v)}
-                  className="relative shrink-0 cursor-pointer"
-                  aria-label="Toggle compact mode"
+                  className={cn(A11Y.tapTarget, "relative shrink-0 cursor-pointer")}
+                  aria-label={t("prof.security.toggle_compact")}
                 >
                   <div className={cn("w-9 h-5 rounded-full transition-colors duration-200", compactMode ? "bg-indigo-500" : "bg-white/10")}>
                     <div className={cn("absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200", compactMode ? "right-0.5" : "left-0.5")} />
@@ -367,7 +435,7 @@ export function UserProfilePage() {
                 <div className="relative">
                   <div className="w-20 h-20 rounded-2xl bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
                     {formAvatar
-                      ? <img src={formAvatar} alt="Preview" className="w-full h-full object-cover" />
+                      ? <img src={formAvatar} alt={t("prof.avatar.preview_alt")} className="w-full h-full object-cover" />
                       : <User className="w-8 h-8 text-slate-400" />
                     }
                   </div>
@@ -382,13 +450,13 @@ export function UserProfilePage() {
                 </div>
                 <div>
                   <p className={cn(T.bodySm, "font-bold text-slate-700 dark:text-slate-300")}>{t("prof.edit.photo")}</p>
-                  <p className={cn(T.caption, "font-bold text-slate-400 dark:text-slate-500 mt-0.5")}>JPG, PNG, WebP · maks. 2 MB</p>
+                  <p className={cn(T.caption, "font-bold text-slate-400 dark:text-slate-500 mt-0.5")}>{t("prof.edit.photo_requirements")}</p>
                   {formAvatar && (
                     <button
                       type="button"
                       onClick={() => setFormAvatar(null)}
                       className={cn(T.buttonSm, "mt-1 hover:underline cursor-pointer", C.destructive.icon)}>
-                      Hapus foto
+                      {t("prof.edit.remove_photo")}
                     </button>
                   )}
                 </div>
@@ -396,11 +464,11 @@ export function UserProfilePage() {
 
               {/* Form Fields */}
               {([
-                { key: "name",     label: "Nama Lengkap",  icon: User,     type: "text",  placeholder: "Masukkan nama lengkap" },
-                { key: "email",    label: "Email",         icon: Mail,     type: "email", placeholder: "nama@domain.com" },
-                { key: "phone",    label: "No. Telepon",   icon: Phone,    type: "tel",   placeholder: "081234567890" },
-                { key: "position", label: "Jabatan",       icon: Briefcase,type: "text",  placeholder: "Jabatan atau posisi" },
-                { key: "location", label: "Lokasi",        icon: MapPin,   type: "text",  placeholder: "Kota, Negara" },
+                { key: "name",     label: t("prof.edit.field.name"),     icon: User,      type: "text",  placeholder: t("prof.edit.field.name_placeholder") },
+                { key: "email",    label: t("prof.edit.field.email"),    icon: Mail,      type: "email", placeholder: t("prof.edit.field.email_placeholder") },
+                { key: "phone",    label: t("prof.edit.field.phone"),    icon: Phone,     type: "tel",   placeholder: t("prof.edit.field.phone_placeholder") },
+                { key: "position", label: t("prof.edit.field.position"), icon: Briefcase, type: "text",  placeholder: t("prof.edit.field.position_placeholder") },
+                { key: "location", label: t("prof.edit.field.location"), icon: MapPin,    type: "text",  placeholder: t("prof.edit.field.location_placeholder") },
               ] as const).map(field => {
                 const Icon = field.icon;
                 const err = errors[field.key];
@@ -441,7 +509,7 @@ export function UserProfilePage() {
                 className={cn("flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-xl uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-sm disabled:opacity-60 cursor-pointer", T.buttonSm)}
               >
                 {saving
-                  ? <><span className={cn(ICON.sm, "border-2 border-white/30 border-t-white rounded-full animate-spin")} />Menyimpan...</>
+                  ? <><span className={cn(ICON.sm, "border-2 border-white/30 border-t-white rounded-full animate-spin")} />{t("common.saving")}</>
                   : <><Check className={ICON.sm} />{t("common.save_changes")}</>
                 }
               </button>

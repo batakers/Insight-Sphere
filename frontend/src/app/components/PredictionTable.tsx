@@ -117,12 +117,12 @@ export function PredictionTable() {
       <ResponsiveTable
         label={t("pred.table.title")}
         scrollerClassName="rounded-none border-0 bg-transparent"
-        minWidthClassName="min-w-[980px]"
+        minWidthClassName={TABLE.minWidth.prediction}
       >
         <table className={TABLE.base} aria-label={t("pred.table.title")}>
           <thead className={TABLE.head}>
             <tr>
-              <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50 px-8 py-5")}>{t("table.product")}</th>
+              <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50 px-8 py-5")}>{t("table.product")}</th>
               <th className={cn(TABLE.headCell, "px-8 py-5")}>{t("table.category")}</th>
               <th className={cn(TABLE.headCellNumeric, "px-8 py-5")}>{t("table.stock")}</th>
               <th className={cn(TABLE.headCellNumeric, "px-8 py-5")}>{t("table.forecast")}</th>
@@ -149,7 +149,8 @@ export function PredictionTable() {
                   >
                     <td className={cn(
                       TABLE.cell,
-                      "sticky left-0 z-10 px-8 py-6",
+                      TABLE.stickyColumn,
+                      "px-8 py-6",
                       isUrgent
                         ? "bg-rose-50 dark:bg-rose-950/30 group-hover:bg-rose-50 dark:group-hover:bg-rose-900/20"
                         : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50"

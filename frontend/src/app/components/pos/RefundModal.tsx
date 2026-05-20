@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { X, RotateCcw, CheckCircle2, Loader2, AlertTriangle, Search } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
+import { MODAL } from "@/app/lib/containers";
 import { E } from "@/app/lib/elevation";
 import { formatRupiah } from "@/app/lib/format";
 import { useTranslation } from "@/app/i18n";
 import { INPUT } from "@/app/lib/forms";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
 interface RefundItem {
   id: string;
@@ -20,7 +22,7 @@ interface RefundItem {
   refundQty: number;
 }
 
-interface MockTransaction {
+interface RefundTransaction {
   id: string;
   date: string;
   time: string;
@@ -33,49 +35,39 @@ interface RefundModalProps {
   onClose: () => void;
 }
 
-const MOCK_TRANSACTIONS: MockTransaction[] = [
-  {
-    id: "TXN-20260422-001", date: "22 Apr 2026", time: "09:15", total: 45000, method: "CASH",
-    items: [
-      { id: "i1", name: "Fotokopi A4 HB (50 lembar)", qty: 1, price: 10000 },
-      { id: "i2", name: "Kertas HVS A4 80gr", qty: 1, price: 35000 },
-    ],
-  },
-  {
-    id: "TXN-20260422-002", date: "22 Apr 2026", time: "10:30", total: 27500, method: "QRIS",
-    items: [
-      { id: "i3", name: "Print A4 Warna (5 lembar)", qty: 1, price: 7500 },
-      { id: "i4", name: "Tinta Printer Hitam", qty: 1, price: 20000 },
-    ],
-  },
-  {
-    id: "TXN-20260421-015", date: "21 Apr 2026", time: "14:50", total: 18000, method: "CASH",
-    items: [
-      { id: "i5", name: "Jilid Spiral", qty: 2, price: 10000 },
-      { id: "i6", name: "Staples Joyko", qty: 1, price: 8000 },
-    ],
-  },
-];
-
 type Step = "select_txn" | "select_items" | "confirm" | "success";
 
 export function RefundModal({ onClose }: RefundModalProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("select_txn");
   const [search, setSearch] = useState("");
-  const [selectedTxn, setSelectedTxn] = useState<MockTransaction | null>(null);
+  const [transactions, setTransactions] = useState<RefundTransaction[]>([]);
+  const [selectedTxn, setSelectedTxn] = useState<RefundTransaction | null>(null);
   const [refundItems, setRefundItems] = useState<RefundItem[]>([]);
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const filteredTxns = useMemo(() => {
     const q = search.toLowerCase();
-    return MOCK_TRANSACTIONS.filter(t =>
+    return transactions.filter(t =>
       t.id.toLowerCase().includes(q) || t.date.toLowerCase().includes(q)
     );
-  }, [search]);
+  }, [transactions, search]);
 
-  const selectTxn = (txn: MockTransaction) => {
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/refund-transactions").then(({ DEMO_REFUND_TRANSACTIONS }) => {
+      if (!cancelled) setTransactions(DEMO_REFUND_TRANSACTIONS);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectTxn = (txn: RefundTransaction) => {
     setSelectedTxn(txn);
     setRefundItems(txn.items.map(i => ({
       id: i.id, name: i.name, qty: i.qty, price: i.price,
@@ -107,7 +99,7 @@ export function RefundModal({ onClose }: RefundModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className={cn(R.xl, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 flex flex-col max-h-[85vh]")}>
+      <div className={cn(R.xl, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 flex flex-col", MODAL.maxHeight.md)}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -201,7 +193,7 @@ export function RefundModal({ onClose }: RefundModalProps) {
                       onClick={e => e.stopPropagation()}
                     >
                       <button onClick={() => setQty(item.id, item.refundQty - 1)} className={cn(T.bodySm, "text-slate-500 hover:text-rose-600 cursor-pointer font-bold")}>−</button>
-                      <span className={cn(T.bodyEmphasis, "font-bold text-rose-600 min-w-[16px] text-center")}>{item.refundQty}</span>
+                      <span className={cn(T.bodyEmphasis, "font-bold text-rose-600", MODAL.counterValue)}>{item.refundQty}</span>
                       <button onClick={() => setQty(item.id, item.refundQty + 1)} className={cn(T.bodySm, "text-slate-500 hover:text-rose-600 cursor-pointer font-bold")}>+</button>
                     </div>
                   )}

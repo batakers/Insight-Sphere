@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useTheme } from "next-themes";
 import { 
   XAxis, 
   YAxis, 
@@ -25,10 +26,11 @@ import {
   Search,
   ChevronRight,
   Sparkles,
-  TrendingUp
+  TrendingUp,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { CHART_COLORS } from "@/app/lib/charts";
+import { CHART_COLORS, getAxisProps, getGridProps, getTooltipContentStyle , CHART_HEIGHT } from "@/app/lib/charts";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/app/components/charts/StableResponsiveContainer";
 import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
@@ -41,6 +43,8 @@ import { A11Y } from "@/app/lib/a11y";
 import { useTranslation } from "@/app/i18n";
 import { useAuth } from "@/app/context/AuthContext";
 import { toast } from "sonner";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import { fetchPredictions, type AIPredictionLogResponse } from "@/app/lib/intelligence-client";
 import { INPUT } from "@/app/lib/forms";
 import { ChartSkeleton, PredictionTableSkeleton } from "../Skeletons";
 import { EmptyState } from "../ui/EmptyState";
@@ -75,9 +79,36 @@ const PriorityBadge = ({ level }: { level: string }) => {
 type PredictionHorizon = "7 Hari" | "14 Hari";
 const PREDICTION_HORIZONS: PredictionHorizon[] = ["7 Hari", "14 Hari"];
 
+// ─── Helper ──────────────────────────────────────────────────────────────────
+
+function mapApiPrediction(p: AIPredictionLogResponse, idx: number) {
+  const rec = p.recommended_stock ?? Math.round(p.predicted_value);
+  const forecast7d = p.horizon_days === 7 ? rec : Math.round(p.predicted_value);
+  const forecast14d = p.horizon_days === 14 ? rec : Math.round(p.predicted_value * 2);
+  const confidence =
+    p.actual_value != null && p.actual_value > 0
+      ? Math.max(60, Math.min(99, Math.round(100 * (1 - Math.abs(p.predicted_value - p.actual_value) / p.actual_value))))
+      : 80;
+  const priority = rec > 500 ? "Tinggi" : rec > 200 ? "Sedang" : "Rendah";
+  return {
+    rowKey: p.id,
+    id: p.product_id ? p.product_id.substring(0, 8) : p.id.substring(0, 8),
+    name: p.family ?? `Produk ${idx + 1}`,
+    category: p.family ?? "—",
+    stock: 0,
+    forecast7d,
+    forecast14d,
+    confidence,
+    trend: "Stabil",
+    priority,
+    deadline: p.predicted_for_date,
+  };
+}
+
 export function PrediksiStokPage() {
   const { t } = useTranslation();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
+  const { resolvedTheme } = useTheme();
   const isTechnical = role === "admin";
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [showModelInfo, setShowModelInfo] = useState(false);
@@ -85,6 +116,23 @@ export function PrediksiStokPage() {
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [apiPredictions, setApiPredictions] = useState<AIPredictionLogResponse[]>([]);
+  const [loadError, setLoadError] = useState("");
+  const chartTheme = resolvedTheme === "dark" ? "dark" : "light";
+  const axisProps = getAxisProps(chartTheme);
+  const gridProps = getGridProps(chartTheme);
+  const tooltipStyle = getTooltipContentStyle(chartTheme);
+
+  useEffect(() => {
+    if (isDemoDataEnabled()) return;
+    setIsDataLoading(true);
+    setLoadError("");
+    fetchPredictions({ store_nbr: user?.storeNbr ?? undefined, limit: 200 })
+      .then((data) => setApiPredictions(data))
+      .catch(() => setLoadError(t("common.error_loading")))
+      .finally(() => setIsDataLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.storeNbr]);
 
   // Mock Data needs to be localized for labels
   const WEEKLY_DEMAND_DATA = useMemo(() => [
@@ -97,25 +145,40 @@ export function PrediksiStokPage() {
     { name: t("day.sun"), prediksi: 790, batasAtas: 860, batasBawah: 720 },
   ], [t]);
 
-  const CATEGORY_DATA = useMemo(() => [
-    { name: t("cat.sembako"), cur: 4500, next: 5200 },
-    { name: t("cat.minuman"), cur: 3200, next: 3800 },
-    { name: t("cat.snack"), cur: 2800, next: 3100 },
-    { name: t("cat.dairy"), cur: 1500, next: 1900 },
-    { name: t("cat.frozen"), cur: 900, next: 850 },
-    { name: t("cat.bakery"), cur: 1200, next: 1400 },
-  ], [t]);
+  const CATEGORY_DATA = useMemo(() => {
+    if (!isDemoDataEnabled() && apiPredictions.length > 0) {
+      const groups: Record<string, number> = {};
+      for (const p of apiPredictions) {
+        const fam = p.family ?? "Lainnya";
+        groups[fam] = (groups[fam] ?? 0) + (p.recommended_stock ?? Math.round(p.predicted_value));
+      }
+      return Object.entries(groups).map(([name, next]) => ({ name, cur: Math.round(next * 0.8), next }));
+    }
+    return [
+      { name: t("cat.sembako"), cur: 4500, next: 5200 },
+      { name: t("cat.minuman"), cur: 3200, next: 3800 },
+      { name: t("cat.snack"), cur: 2800, next: 3100 },
+      { name: t("cat.dairy"), cur: 1500, next: 1900 },
+      { name: t("cat.frozen"), cur: 900, next: 850 },
+      { name: t("cat.bakery"), cur: 1200, next: 1400 },
+    ];
+  }, [t, apiPredictions]);
 
-  const FORECAST_PRODUCTS = useMemo(() => [
-    { id: "BR123", name: "Beras Premium 5kg", category: t("cat.sembako"), stock: 120, forecast7d: 450, forecast14d: 920, confidence: 96, trend: "Naik", priority: "Tinggi", deadline: "18 Apr" },
-    { id: "ID456", name: "Indomie Goreng Spc", category: t("cat.snack"), stock: 1560, forecast7d: 1200, forecast14d: 2300, confidence: 92, trend: "Stabil", priority: "Rendah", deadline: "25 Apr" },
-    { id: "TS789", name: "Teh Botol Sosro", category: t("cat.minuman"), stock: 850, forecast7d: 900, forecast14d: 1850, confidence: 88, trend: "Naik", priority: "Tinggi", deadline: "17 Apr" },
-    { id: "SU012", name: "Susu Ultra 1L", category: t("cat.dairy"), stock: 45, forecast7d: 180, forecast14d: 350, confidence: 94, trend: "Naik", priority: "Tinggi", deadline: "17 Apr" },
-    { id: "CP345", name: "Chitato Original", category: t("cat.snack"), stock: 320, forecast7d: 310, forecast14d: 640, confidence: 85, trend: "Turun", priority: "Sedang", deadline: "21 Apr" },
-    { id: "GG678", name: "Gudang Garam Filter", category: t("cat.sembako"), stock: 110, forecast7d: 500, forecast14d: 950, confidence: 91, trend: "Naik", priority: "Tinggi", deadline: "17 Apr" },
-    { id: "MS910", name: "Minyak SunCo 2L", category: t("cat.sembako"), stock: 15, forecast7d: 120, forecast14d: 250, confidence: 98, trend: "Naik", priority: "Tinggi", deadline: "16 Apr" },
-    { id: "YB134", name: "Yakult Multipack", category: t("cat.dairy"), stock: 1200, forecast7d: 850, forecast14d: 1700, confidence: 89, trend: "Stabil", priority: "Rendah", deadline: "29 Apr" },
-  ], [t]);
+  const FORECAST_PRODUCTS = useMemo(() => {
+    if (!isDemoDataEnabled() && apiPredictions.length > 0) {
+      return apiPredictions.map((p, i) => mapApiPrediction(p, i));
+    }
+    return [
+      { id: "BR123", name: "Beras Premium 5kg", category: t("cat.sembako"), stock: 120, forecast7d: 450, forecast14d: 920, confidence: 96, trend: "Naik", priority: "Tinggi", deadline: "18 Apr" },
+      { id: "ID456", name: "Indomie Goreng Spc", category: t("cat.snack"), stock: 1560, forecast7d: 1200, forecast14d: 2300, confidence: 92, trend: "Stabil", priority: "Rendah", deadline: "25 Apr" },
+      { id: "TS789", name: "Teh Botol Sosro", category: t("cat.minuman"), stock: 850, forecast7d: 900, forecast14d: 1850, confidence: 88, trend: "Naik", priority: "Tinggi", deadline: "17 Apr" },
+      { id: "SU012", name: "Susu Ultra 1L", category: t("cat.dairy"), stock: 45, forecast7d: 180, forecast14d: 350, confidence: 94, trend: "Naik", priority: "Tinggi", deadline: "17 Apr" },
+      { id: "CP345", name: "Chitato Original", category: t("cat.snack"), stock: 320, forecast7d: 310, forecast14d: 640, confidence: 85, trend: "Turun", priority: "Sedang", deadline: "21 Apr" },
+      { id: "GG678", name: "Gudang Garam Filter", category: t("cat.sembako"), stock: 110, forecast7d: 500, forecast14d: 950, confidence: 91, trend: "Naik", priority: "Tinggi", deadline: "17 Apr" },
+      { id: "MS910", name: "Minyak SunCo 2L", category: t("cat.sembako"), stock: 15, forecast7d: 120, forecast14d: 250, confidence: 98, trend: "Naik", priority: "Tinggi", deadline: "16 Apr" },
+      { id: "YB134", name: "Yakult Multipack", category: t("cat.dairy"), stock: 1200, forecast7d: 850, forecast14d: 1700, confidence: 89, trend: "Stabil", priority: "Rendah", deadline: "29 Apr" },
+    ].map((product) => ({ rowKey: product.id, ...product }));
+  }, [t, apiPredictions]);
 
 
 
@@ -130,10 +193,17 @@ export function PrediksiStokPage() {
   const handleUpdate = () => {
     setUpdating(true);
     const toastId = toast.loading(t("pred.toast.loading"));
-    setTimeout(() => {
-      setUpdating(false);
-      toast.success(t("pred.toast.done"), { id: toastId });
-    }, 2000);
+    if (isDemoDataEnabled()) {
+      setTimeout(() => {
+        setUpdating(false);
+        toast.success(t("pred.toast.done"), { id: toastId });
+      }, 2000);
+      return;
+    }
+    fetchPredictions({ store_nbr: user?.storeNbr ?? undefined, limit: 200 })
+      .then((data) => { setApiPredictions(data); toast.success(t("pred.toast.done"), { id: toastId }); })
+      .catch(() => { toast.error(t("common.error_loading"), { id: toastId }); })
+      .finally(() => setUpdating(false));
   };
 
   return (
@@ -165,6 +235,12 @@ export function PrediksiStokPage() {
           </button>
         </div>
       </div>
+
+      {!isDemoDataEnabled() && loadError && (
+        <div className={cn("flex items-center gap-2 px-4 py-3 rounded-xl border text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/50", T.bodySm)}>
+          <AlertCircle className="size-4 shrink-0" /> {loadError}
+        </div>
+      )}
 
       {/* Model Info Panel */}
       {showModelInfo && (
@@ -237,7 +313,7 @@ export function PrediksiStokPage() {
             <h3 className={cn(T.h4, "text-slate-900 dark:text-slate-100 flex items-center gap-2")}>
                <TrendingUp className={cn(ICON.sm, C.primary.icon)} /> {t("pred.chart.weekly")}
             </h3>
-            <div className="h-[280px]">
+            <div style={{ height: CHART_HEIGHT.md }}>
                {isDataLoading ? (
                   <ChartSkeleton minimal />
                ) : (
@@ -249,11 +325,11 @@ export function PrediksiStokPage() {
                               <stop offset="95%" stopColor={CHART_COLORS.primary.base} stopOpacity={0}/>
                            </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.grid.light} />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: CHART_COLORS.axis.tickLight, fontSize: 9, fontWeight: 700}} />
-                        <YAxis axisLine={false} tickLine={false} tick={{fill: CHART_COLORS.axis.tickLight, fontSize: 9, fontWeight: 700}} width={30} />
+                        <CartesianGrid {...gridProps} />
+                        <XAxis dataKey="name" {...axisProps} tick={{ ...axisProps.tick, fontSize: 9, fontWeight: 700 }} />
+                        <YAxis {...axisProps} tick={{ ...axisProps.tick, fontSize: 9, fontWeight: 700 }} width={30} />
                         <Tooltip 
-                           contentStyle={{borderRadius: '0.75rem', border: 'none', background: CHART_COLORS.tooltip.bgDark, color: CHART_COLORS.tooltip.foregroundDark, fontSize: '10px'}}
+                           contentStyle={tooltipStyle}
                         />
                         <Area type="monotone" dataKey="prediksi" stroke={CHART_COLORS.primary.base} strokeWidth={3} fillOpacity={1} fill="url(#predFill)" />
                      </AreaChart>
@@ -266,15 +342,15 @@ export function PrediksiStokPage() {
             <h3 className={cn(T.h4, "text-slate-900 dark:text-slate-100 flex items-center gap-2")}>
                <BarChart3 className={cn(ICON.sm, C.primary.icon)} /> {t("pred.chart.category")}
             </h3>
-            <div className="h-[280px]">
+            <div style={{ height: CHART_HEIGHT.md }}>
                {isDataLoading ? (
                  <ChartSkeleton minimal type="bar-horizontal" />
                ) : (
                  <ResponsiveContainer debounce={200} width="100%" height="100%">
                     <BarChart data={CATEGORY_DATA} layout="vertical">
                        <XAxis type="number" hide />
-                       <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: CHART_COLORS.axis.tickLight, fontSize: 9, fontWeight: 800}} width={70} />
-                       <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '0.5rem', border: 'none', background: CHART_COLORS.tooltip.bgDark, color: CHART_COLORS.tooltip.foregroundDark, fontSize: '9px'}} />
+                       <YAxis dataKey="name" type="category" {...axisProps} tick={{ ...axisProps.tick, fontSize: 9, fontWeight: 800 }} width={70} />
+                       <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ ...tooltipStyle, borderRadius: '0.5rem', fontSize: '9px' }} />
                        <Bar dataKey="next" fill={CHART_COLORS.primary.base} radius={[0, 6, 6, 0]} barSize={14} />
                     </BarChart>
                  </ResponsiveContainer>
@@ -337,12 +413,12 @@ export function PrediksiStokPage() {
             <ResponsiveTable
               label={t("pred.table.title")}
               scrollerClassName="rounded-none border-0 bg-transparent"
-              minWidthClassName="min-w-[860px]"
+              minWidthClassName={TABLE.minWidth.forecast}
             >
                <table className={TABLE.base} aria-label={t("pred.table.title")}>
                   <thead className={TABLE.head}>
                      <tr>
-                        <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>{t("pred.table.product")}</th>
+                        <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")}>{t("pred.table.product")}</th>
                         <th className={TABLE.headCellNumeric}>{t("pred.table.current")}</th>
                         <th className={TABLE.headCellNumeric}>{t("pred.table.forecast")}</th>
                         <th className={TABLE.headCell}>{t("pred.table.confidence")}</th>
@@ -356,10 +432,10 @@ export function PrediksiStokPage() {
                          const forecast = horizon === "7 Hari" ? p.forecast7d : p.forecast14d;
                          const deficit = p.stock < forecast;
                          return (
-                          <tr key={p.id} className={cn(TABLE.row, TABLE.rowHover, "group", deficit && "bg-rose-50/20 dark:bg-rose-900/10")}>
+                          <tr key={p.rowKey} className={cn(TABLE.row, TABLE.rowHover, "group", deficit && "bg-rose-50/20 dark:bg-rose-900/10")}>
                              <td className={cn(
                                TABLE.cell,
-                               "sticky left-0 z-10",
+                               TABLE.stickyColumn,
                                deficit
                                  ? "bg-rose-50 dark:bg-rose-950/30 group-hover:bg-rose-50 dark:group-hover:bg-rose-900/20"
                                  : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   X,
   Loader2,
@@ -17,10 +17,13 @@ import { T } from "@/app/lib/typography";
 import { TABLE } from "@/app/lib/data";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
-import { E } from "@/app/lib/elevation";
+import { E, Z } from "@/app/lib/elevation";
+import { MODAL } from "@/app/lib/containers";
+import { BACKDROP } from "@/app/lib/utility";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
 import { FIELD, INPUT, LABEL, SELECT } from "@/app/lib/forms";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 
 interface TransferProduct {
   id: string;
@@ -50,22 +53,16 @@ interface StockTransferModalProps {
   onSubmit: (data: { fromBranch: string; toBranch: string; productId: string; qty: number; notes: string }) => void;
 }
 
-const MOCK_BRANCHES: Branch[] = [
-  { id: "1", name: "Lisna Fotocopy Digital — Rawasari" },
-  { id: "2", name: "Lisna Fotocopy Digital — Cempaka Putih" },
-  { id: "3", name: "Lisna Fotocopy Digital — Matraman" },
-];
-
-const MOCK_TRANSFER_HISTORY: TransferHistoryItem[] = [
-  { id: "TRF-001", date: "2026-04-20", from: "Rawasari", to: "Cempaka Putih", product: "Kertas HVS A4 80gr", qty: 50, status: "done" },
-  { id: "TRF-002", date: "2026-04-18", from: "Rawasari", to: "Matraman", product: "Tinta Printer Hitam", qty: 10, status: "done" },
-  { id: "TRF-003", date: "2026-04-15", from: "Cempaka Putih", to: "Rawasari", product: "Kertas HVS F4 70gr", qty: 30, status: "pending" },
-];
-
 type TabView = "form" | "history";
+
+function getBranchDisplayName(name: string) {
+  return name.split(" - ")[1]?.trim() ?? name.split("—")[1]?.trim() ?? name;
+}
 
 export function StockTransferModal({ products, onClose, onSubmit }: StockTransferModalProps) {
   const { t } = useTranslation();
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [transferHistory, setTransferHistory] = useState<TransferHistoryItem[]>([]);
   const [tab, setTab] = useState<TabView>("form");
   const [fromBranch, setFromBranch] = useState("");
   const [toBranch, setToBranch] = useState("");
@@ -79,6 +76,22 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
     () => products.find(p => p.id === productId) ?? null,
     [products, productId]
   );
+
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/inventory-transfer").then(({ DEMO_INVENTORY_TRANSFER }) => {
+      if (!cancelled) {
+        setBranches(DEMO_INVENTORY_TRANSFER.branches);
+        setTransferHistory(DEMO_INVENTORY_TRANSFER.history);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const qtyNum = parseInt(qty) || 0;
 
@@ -106,35 +119,39 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
     setSubmitted(true);
   };
 
-  const fromBranchName = MOCK_BRANCHES.find(b => b.id === fromBranch)?.name ?? "";
-  const toBranchName = MOCK_BRANCHES.find(b => b.id === toBranch)?.name ?? "";
+  const fromBranchName = branches.find(b => b.id === fromBranch)?.name ?? "";
+  const toBranchName = branches.find(b => b.id === toBranch)?.name ?? "";
 
   if (submitted) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+      <div className={cn(BACKDROP.overlay, Z.overlay, MODAL.wrapper, "animate-in fade-in duration-200")}>
         <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-sm overflow-hidden border border-slate-200/50 dark:border-slate-700 animate-in zoom-in-95 duration-300 p-8 flex flex-col items-center text-center gap-5")}>
           <div className={cn(R.lg, "size-14 bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center")}>
             <CheckCircle2 className={cn("size-7", C.primary.icon)} />
           </div>
           <div>
-            <h3 className={cn(T.h3, "text-slate-900 dark:text-slate-100")}>Transfer Terkirim</h3>
+            <h3 className={cn(T.h3, "text-slate-900 dark:text-slate-100")}>{t("inv.transfer.success_title")}</h3>
             <p className={cn(T.label, "text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed")}>
-              <span className="font-bold text-slate-700 dark:text-slate-300">{qtyNum} unit</span> {selectedProduct?.name} dikirim dari{" "}
-              <span className="font-bold text-slate-700 dark:text-slate-300">{fromBranchName.split("—")[1]?.trim()}</span> ke{" "}
-              <span className="font-bold text-slate-700 dark:text-slate-300">{toBranchName.split("—")[1]?.trim()}</span>.
+              {t("inv.transfer.success_desc", {
+                qty: qtyNum,
+                unit: t("table.unit"),
+                product: selectedProduct?.name ?? "",
+                from: getBranchDisplayName(fromBranchName),
+                to: getBranchDisplayName(toBranchName),
+              })}
             </p>
           </div>
           <div className={cn(R.md, "w-full bg-slate-50 dark:bg-slate-800 p-4 border border-slate-100 dark:border-slate-700 space-y-2 text-left")}>
             <div className="flex justify-between">
-              <span className={cn(T.label, "text-slate-400")}>Produk</span>
+              <span className={cn(T.label, "text-slate-400")}>{t("inv.transfer.product")}</span>
               <span className="font-bold text-slate-700 dark:text-slate-300">{selectedProduct?.name}</span>
             </div>
             <div className="flex justify-between">
-              <span className={cn(T.label, "text-slate-400")}>Jumlah</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">{qtyNum} unit</span>
+              <span className={cn(T.label, "text-slate-400")}>{t("inv.transfer.qty")}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">{qtyNum} {t("table.unit")}</span>
             </div>
             <div className="flex justify-between">
-              <span className={cn(T.label, "text-slate-400")}>Status</span>
+              <span className={cn(T.label, "text-slate-400")}>{t("common.status")}</span>
               <span className={cn(T.micro, R.full, "px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-800/50")}>
                 {t("inv.transfer.status_pending")}
               </span>
@@ -144,7 +161,7 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
             onClick={onClose}
             className={cn(T.buttonSm, R.md, "w-full h-11 bg-indigo-600 hover:bg-indigo-500 text-white transition-all cursor-pointer")}
           >
-            Tutup
+            {t("common.close")}
           </button>
         </div>
       </div>
@@ -152,8 +169,8 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-lg overflow-hidden border border-slate-200/50 dark:border-slate-700 animate-in slide-in-from-bottom-8 duration-300 flex flex-col max-h-[90vh]")}>
+    <div className={cn(BACKDROP.overlay, Z.overlay, MODAL.wrapper, "animate-in fade-in duration-200")}>
+      <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-lg overflow-hidden border border-slate-200/50 dark:border-slate-700 animate-in slide-in-from-bottom-8 duration-300 flex flex-col", MODAL.maxHeight.lg)}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -185,7 +202,7 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
               )}
             >
               {v === "form" ? <ArrowLeftRight className="size-3.5" /> : <History className="size-3.5" />}
-              {v === "form" ? "Transfer Baru" : t("inv.transfer.history")}
+              {v === "form" ? t("inv.transfer.new") : t("inv.transfer.history")}
             </button>
           ))}
         </div>
@@ -206,9 +223,9 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
                     onChange={e => setFromBranch(e.target.value)}
                     className={cn(SELECT.base, SELECT.size.md, T.label, "font-bold cursor-pointer")}
                   >
-                    <option value="">Pilih cabang...</option>
-                    {MOCK_BRANCHES.map(b => (
-                      <option key={b.id} value={b.id}>{b.name.split("—")[1]?.trim() ?? b.name}</option>
+                    <option value="">{t("inv.transfer.select_branch")}</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{getBranchDisplayName(b.name)}</option>
                     ))}
                   </select>
                 </div>
@@ -225,9 +242,9 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
                     onChange={e => setToBranch(e.target.value)}
                     className={cn(SELECT.base, SELECT.size.md, T.label, "font-bold cursor-pointer")}
                   >
-                    <option value="">Pilih cabang...</option>
-                    {MOCK_BRANCHES.filter(b => b.id !== fromBranch).map(b => (
-                      <option key={b.id} value={b.id}>{b.name.split("—")[1]?.trim() ?? b.name}</option>
+                    <option value="">{t("inv.transfer.select_branch")}</option>
+                    {branches.filter(b => b.id !== fromBranch).map(b => (
+                      <option key={b.id} value={b.id}>{getBranchDisplayName(b.name)}</option>
                     ))}
                   </select>
                 </div>
@@ -244,9 +261,9 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
                   onChange={e => setProductId(e.target.value)}
                   className={cn(SELECT.base, SELECT.size.md, T.label, "font-bold cursor-pointer")}
                 >
-                  <option value="">Pilih produk...</option>
+                  <option value="">{t("inv.transfer.select_product")}</option>
                   {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} · Stok: {p.stock}</option>
+                    <option key={p.id} value={p.id}>{t("inv.transfer.stock_option", { product: p.name, stock: p.stock })}</option>
                   ))}
                 </select>
               </div>
@@ -254,8 +271,8 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
               {/* Stock info */}
               {selectedProduct && (
                 <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 border border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                  <span className={cn(T.label, "text-slate-500 dark:text-slate-400")}>Stok tersedia di asal</span>
-                  <span className={cn(T.body, "font-bold text-slate-900 dark:text-slate-100 tabular-nums")}>{selectedProduct.stock} unit</span>
+                  <span className={cn(T.label, "text-slate-500 dark:text-slate-400")}>{t("inv.transfer.available_at_source")}</span>
+                  <span className={cn(T.body, "font-bold text-slate-900 dark:text-slate-100 tabular-nums")}>{selectedProduct.stock} {t("table.unit")}</span>
                 </div>
               )}
 
@@ -290,17 +307,17 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
               {/* Preview */}
               {fromBranch && toBranch && selectedProduct && qtyNum > 0 && !validationError && (
                 <div className="bg-slate-900 rounded-xl p-4 animate-in slide-in-from-top-4 duration-300">
-                  <p className={cn(T.h4, "text-slate-500 mb-3")}>Preview Transfer</p>
+                  <p className={cn(T.h4, "text-slate-500 mb-3")}>{t("inv.transfer.preview")}</p>
                   <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
                     <div>
-                      <p className={cn(T.label, "text-slate-500 mb-1")}>Asal</p>
-                      <p className={cn(T.label, "font-bold text-white leading-tight")}>{fromBranchName.split("—")[1]?.trim()}</p>
+                      <p className={cn(T.label, "text-slate-500 mb-1")}>{t("inv.transfer.origin")}</p>
+                      <p className={cn(T.label, "font-bold text-white leading-tight")}>{getBranchDisplayName(fromBranchName)}</p>
                       <p className={cn(T.bodySm, "font-bold text-rose-400 mt-1 tabular-nums")}>−{qtyNum}</p>
                     </div>
                     <ArrowRight className="size-4 text-slate-600" />
                     <div>
-                      <p className={cn(T.label, "text-slate-500 mb-1")}>Tujuan</p>
-                      <p className={cn(T.label, "font-bold text-white leading-tight")}>{toBranchName.split("—")[1]?.trim()}</p>
+                      <p className={cn(T.label, "text-slate-500 mb-1")}>{t("inv.transfer.destination")}</p>
+                      <p className={cn(T.label, "font-bold text-white leading-tight")}>{getBranchDisplayName(toBranchName)}</p>
                       <p className={cn(T.bodySm, "font-bold text-emerald-400 mt-1 tabular-nums")}>+{qtyNum}</p>
                     </div>
                   </div>
@@ -332,7 +349,7 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
                 )}
               >
                 {isSubmitting ? (
-                  <><Loader2 className="size-3.5 animate-spin" /> Memproses...</>
+                  <><Loader2 className="size-3.5 animate-spin" /> {t("common.processing")}</>
                 ) : (
                   <><ArrowLeftRight className="size-3.5" />{t("inv.transfer.submit")}</>
                 )}
@@ -345,23 +362,23 @@ export function StockTransferModal({ products, onClose, onSubmit }: StockTransfe
             <ResponsiveTable
               label={t("inv.transfer.history")}
               scrollerClassName="rounded-none border-0 bg-transparent"
-              minWidthClassName="min-w-[760px]"
+              minWidthClassName={TABLE.minWidth.inventory}
             >
               <table className={TABLE.base} aria-label={t("inv.transfer.history")}>
                 <thead className={cn(TABLE.head, "border-b border-slate-100 dark:border-slate-800")}>
                   <tr>
-                    <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50 px-5")}>ID</th>
+                    <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50 px-5")}>{t("common.id")}</th>
                     <th className={TABLE.headCell}>{t("inv.transfer.date")}</th>
-                    <th className={TABLE.headCell}>Rute</th>
+                    <th className={TABLE.headCell}>{t("inv.transfer.route")}</th>
                     <th className={TABLE.headCell}>{t("inv.transfer.product")}</th>
-                    <th className={cn(TABLE.headCellNumeric, "text-center")}>Qty</th>
-                    <th className={cn(TABLE.headCell, "text-center")}>Status</th>
+                    <th className={cn(TABLE.headCellNumeric, "text-center")}>{t("common.qty")}</th>
+                    <th className={cn(TABLE.headCell, "text-center")}>{t("common.status")}</th>
                   </tr>
                 </thead>
                 <tbody className={TABLE.body}>
-                  {MOCK_TRANSFER_HISTORY.map(item => (
+                  {transferHistory.map(item => (
                     <tr key={item.id} className={cn(TABLE.row, TABLE.rowHover, "group")}>
-                      <td className={cn(TABLE.cell, T.bodySm, "sticky left-0 z-10 bg-white px-5 py-3 font-bold text-indigo-600 dark:bg-slate-900 dark:text-indigo-400 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>{item.id}</td>
+                      <td className={cn(TABLE.cell, T.bodySm, TABLE.stickyColumn, "bg-white px-5 py-3 font-bold text-indigo-600 dark:bg-slate-900 dark:text-indigo-400 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>{item.id}</td>
                       <td className={cn(TABLE.cell, T.bodySm, "py-3 font-bold text-slate-500 dark:text-slate-400")}>{item.date}</td>
                       <td className={TABLE.cell}>
                         <div className={cn("flex items-center gap-1.5 text-slate-700 dark:text-slate-300", T.label, "font-bold")}>

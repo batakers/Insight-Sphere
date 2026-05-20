@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
@@ -15,9 +16,27 @@ import { T } from "@/app/lib/typography";
 import { R } from "@/app/lib/radii";
 import { E } from "@/app/lib/elevation";
 import { useTranslation } from "@/app/i18n";
+import { useAuth } from "@/app/context/AuthContext";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import { fetchStockSummary, type StockSummaryResponse } from "@/app/lib/dashboard-client";
 
 export function KPICards() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const [summary, setSummary] = useState<StockSummaryResponse | null>(null);
+
+  useEffect(() => {
+    if (isDemoDataEnabled()) return;
+    void fetchStockSummary(user?.storeNbr ?? undefined).then(setSummary).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.storeNbr]);
+
+  const stockoutCount = summary ? summary.critical + summary.out_of_stock : null;
+  const inventoryValue = summary ? summary.total_inventory_value : null;
+  const stockHealthPct =
+    summary && summary.total_products > 0
+      ? Math.round((summary.safe / summary.total_products) * 100)
+      : null;
 
   const cards = [
     {
@@ -33,7 +52,7 @@ export function KPICards() {
     },
     {
       title: t("kpi.stock.title"),
-      value: "78%",
+      value: stockHealthPct != null ? `${stockHealthPct}%` : "78%",
       icon: ShieldCheck,
       description: t("kpi.stock.desc"),
       trend: "+3.0%",
@@ -44,7 +63,7 @@ export function KPICards() {
     },
     {
       title: t("kpi.stockout.title"),
-      value: "12 Item",
+      value: stockoutCount != null ? `${stockoutCount} Item` : "12 Item",
       icon: AlertTriangle,
       description: t("kpi.stockout.desc"),
       trend: "-2 item",
@@ -55,7 +74,7 @@ export function KPICards() {
     },
     {
       title: t("kpi.modal.title"),
-      value: formatRupiah(14200000, { compact: true }),
+      value: inventoryValue != null ? formatRupiah(inventoryValue, { compact: true }) : formatRupiah(14200000, { compact: true }),
       icon: PackageCheck,
       description: t("kpi.modal.desc"),
       trend: "+" + formatRupiah(2100000, { compact: true }),

@@ -17,7 +17,9 @@ import { T } from "@/app/lib/typography";
 import { TABLE } from "@/app/lib/data";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
-import { E } from "@/app/lib/elevation";
+import { E, Z } from "@/app/lib/elevation";
+import { MODAL } from "@/app/lib/containers";
+import { BACKDROP } from "@/app/lib/utility";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
 import { FIELD, INPUT, LABEL } from "@/app/lib/forms";
@@ -95,28 +97,28 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
 
   if (submitted) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+      <div className={cn(BACKDROP.overlay, Z.overlay, MODAL.wrapper, "animate-in fade-in duration-200")}>
         <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-sm overflow-hidden border border-slate-200/50 dark:border-slate-700 animate-in zoom-in-95 duration-300 p-8 flex flex-col items-center text-center gap-4")}>
           <div className={cn(R.lg, C.success.bg, "size-14 flex items-center justify-center")}>
             <CheckCircle2 className={cn("size-7", C.success.icon)} />
           </div>
           <div>
-            <h3 className={cn(T.h3, "text-slate-900 dark:text-slate-100")}>Opname Selesai</h3>
+            <h3 className={cn(T.h3, "text-slate-900 dark:text-slate-100")}>{t("inv.opname.success_title")}</h3>
             <p className={cn(T.bodySm, "text-slate-500 dark:text-slate-400 mt-1")}>
-              {summary.adjusted} item disesuaikan dari {summary.total} item yang diperiksa.
+              {t("inv.opname.success_desc", { adjusted: summary.adjusted, total: summary.total })}
             </p>
           </div>
           <div className="flex gap-3 w-full">
             <div className="flex-1 bg-rose-50 dark:bg-rose-900/30 rounded-xl p-3 text-center border border-rose-100 dark:border-rose-800/50">
-              <p className={cn(T.label, "text-rose-400")}>Kurang</p>
+              <p className={cn(T.label, "text-rose-400")}>{t("inv.opname.shortage")}</p>
               <p className={cn(T.kpiCard, "text-rose-600 dark:text-rose-400")}>{summary.shortage}</p>
             </div>
             <div className={cn(R.md, "flex-1 bg-amber-50 dark:bg-amber-900/30 p-3 text-center border border-amber-100 dark:border-amber-800/50")}>
-              <p className={cn(T.label, "text-amber-400")}>Lebih</p>
+              <p className={cn(T.label, "text-amber-400")}>{t("inv.opname.surplus")}</p>
               <p className={cn(T.kpiCard, "text-amber-600 dark:text-amber-400")}>{summary.surplus}</p>
             </div>
             <div className={cn(R.md, "flex-1 bg-emerald-50 dark:bg-emerald-900/30 p-3 text-center border border-emerald-100 dark:border-emerald-800/50")}>
-              <p className={cn(T.label, "text-emerald-400")}>Sesuai</p>
+              <p className={cn(T.label, "text-emerald-400")}>{t("inv.opname.match")}</p>
               <p className={cn(T.kpiCard, "text-emerald-600 dark:text-emerald-400")}>{summary.checked - summary.adjusted}</p>
             </div>
           </div>
@@ -124,7 +126,7 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
             onClick={onClose}
             className={cn(T.buttonSm, R.md, "w-full h-11 bg-indigo-600 hover:bg-indigo-500 text-white transition-all cursor-pointer")}
           >
-            Tutup
+            {t("common.close")}
           </button>
         </div>
       </div>
@@ -132,8 +134,8 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-2xl overflow-hidden border border-slate-200/50 dark:border-slate-700 animate-in slide-in-from-bottom-8 duration-300 flex flex-col max-h-[90vh]")}>
+    <div className={cn(BACKDROP.overlay, Z.overlay, MODAL.wrapper, "animate-in fade-in duration-200")}>
+      <div className={cn(R.lg, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-2xl overflow-hidden border border-slate-200/50 dark:border-slate-700 animate-in slide-in-from-bottom-8 duration-300 flex flex-col", MODAL.maxHeight.lg)}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
@@ -158,11 +160,11 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
             <span className={cn(T.dataSm, "text-slate-700 dark:text-slate-300")}>{summary.checked}/{summary.total}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={cn(T.label, "text-rose-400")}>Kurang:</span>
+            <span className={cn(T.label, "text-rose-400")}>{t("inv.opname.shortage")}:</span>
             <span className={cn(T.dataSm, "text-rose-600")}>{summary.shortage}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className={cn(T.label, "text-amber-400")}>Lebih:</span>
+            <span className={cn(T.label, "text-amber-400")}>{t("inv.opname.surplus")}:</span>
             <span className={cn(T.dataSm, "text-amber-600")}>{summary.surplus}</span>
           </div>
           <div className="ml-auto">
@@ -199,12 +201,12 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
                   <ResponsiveTable
                     label={`${t("inv.opname.title")} - ${cat}`}
                     scrollerClassName="rounded-none border-0 bg-transparent"
-                    minWidthClassName="min-w-[760px]"
+                    minWidthClassName={TABLE.minWidth.inventory}
                   >
                     <table className={TABLE.base} aria-label={`${t("inv.opname.title")} - ${cat}`}>
                       <thead className={cn(TABLE.head, "border-b border-slate-50 dark:border-slate-800")}>
                         <tr>
-                          <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50 px-6 py-2")}>{t("inv.opname.product")}</th>
+                          <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50 px-6 py-2")}>{t("inv.opname.product")}</th>
                           <th className={cn(TABLE.headCellNumeric, "px-4 py-2 text-center")}>{t("inv.opname.system_stock")}</th>
                           <th className={cn(TABLE.headCellNumeric, "px-4 py-2 text-center")}>{t("inv.opname.physical_count")}</th>
                           <th className={cn(TABLE.headCellNumeric, "px-4 py-2 text-center")}>{t("inv.opname.discrepancy")}</th>
@@ -214,7 +216,7 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
                       <tbody className={TABLE.body}>
                         {catRows.map(row => (
                           <tr key={row.id} className={cn(TABLE.row, TABLE.rowHover, "group")}>
-                            <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white px-6 py-3 dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                            <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white px-6 py-3 dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                               <p className={cn(T.bodySm, "font-bold text-slate-900 dark:text-slate-100")}>{row.name}</p>
                               <p className={cn(T.code, "text-slate-400")}>{row.sku}</p>
                             </td>
@@ -306,7 +308,7 @@ export function StockOpnameModal({ products, onClose, onSubmit }: StockOpnameMod
                 )}
               >
                 {isSubmitting ? (
-                  <><Loader2 className="size-3.5 animate-spin" /> Memproses...</>
+                  <><Loader2 className="size-3.5 animate-spin" /> {t("inv.opname.processing")}</>
                 ) : (
                   <><CheckCircle2 className="size-3.5" />{t("inv.opname.submit")}</>
                 )}

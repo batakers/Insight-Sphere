@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
+import { E } from "@/app/lib/elevation";
 import { useTranslation } from "@/app/i18n";
+import { WHAT_IF_SIMULATOR_RULES } from "@/app/domain/constants";
 
 interface WhatIfSimulatorProps {
   basePrediction: number;
@@ -28,19 +30,20 @@ export function WhatIfSimulator({ basePrediction, currentStock, productName, sce
   const { t } = useTranslation();
   // State for interactive simulation
   const [promoActive, setPromoActive] = useState(false);
-  const [promoDiscount, setPromoDiscount] = useState(10);
+  const [promoDiscount, setPromoDiscount] = useState<number>(WHAT_IF_SIMULATOR_RULES.defaultPromoDiscountPct);
   const [weatherChange, setWeatherChange] = useState(false);
   const [competitorRestock, setCompetitorRestock] = useState(false);
 
   // Calculate adjusted demand based on client-side rules (mocking AI inference)
   const adjustedDemand = useMemo(() => {
     let base = basePrediction;
-    // Diskon 10% -> +15% demand
-    if (promoActive) base = Math.round(base * (1 + (promoDiscount / 100) * 1.5));
-    // Cuaca cerah -> -15% demand untuk item tertentu (beras di hujan)
-    if (weatherChange) base = Math.round(base * 0.85);
-    // Kompetitor restok -> -20% demand
-    if (competitorRestock) base = Math.round(base * 0.80);
+    if (promoActive) {
+      base = Math.round(
+        base * (1 + (promoDiscount / 100) * WHAT_IF_SIMULATOR_RULES.promoDiscount.demandLiftPerDiscountPct)
+      );
+    }
+    if (weatherChange) base = Math.round(base * WHAT_IF_SIMULATOR_RULES.weatherDemandMultiplier);
+    if (competitorRestock) base = Math.round(base * WHAT_IF_SIMULATOR_RULES.competitorRestockDemandMultiplier);
     return base;
   }, [basePrediction, promoActive, promoDiscount, weatherChange, competitorRestock]);
 
@@ -49,7 +52,7 @@ export function WhatIfSimulator({ basePrediction, currentStock, productName, sce
 
   const resetAll = () => {
     setPromoActive(false);
-    setPromoDiscount(10);
+    setPromoDiscount(WHAT_IF_SIMULATOR_RULES.defaultPromoDiscountPct);
     setWeatherChange(false);
     setCompetitorRestock(false);
   };
@@ -99,9 +102,9 @@ export function WhatIfSimulator({ basePrediction, currentStock, productName, sce
                   </div>
                   <input
                     type="range"
-                    min={5}
-                    max={50}
-                    step={5}
+                    min={WHAT_IF_SIMULATOR_RULES.promoDiscount.minPct}
+                    max={WHAT_IF_SIMULATOR_RULES.promoDiscount.maxPct}
+                    step={WHAT_IF_SIMULATOR_RULES.promoDiscount.stepPct}
                     value={promoDiscount}
                     onChange={(e) => setPromoDiscount(Number(e.target.value))}
                     className="w-full h-2 bg-accent rounded-lg appearance-none cursor-pointer accent-primary"
@@ -188,7 +191,7 @@ export function WhatIfSimulator({ basePrediction, currentStock, productName, sce
               </div>
             </div>
 
-            <div className="text-center p-6 bg-primary/5 rounded-2xl border border-primary/20 shadow-[0_0_20px_rgba(var(--primary),0.05)]">
+            <div className={cn(E.glowPrimary, "text-center p-6 bg-primary/5 rounded-2xl border border-primary/20")}>
               <p className={cn(T.h4, "text-primary mb-3")}>{t("sim.impact.base")}</p>
               <div className="flex items-end justify-center gap-1">
                 <p className={cn(T.kpiHero, "text-primary")}>{basePrediction}</p>
@@ -201,8 +204,8 @@ export function WhatIfSimulator({ basePrediction, currentStock, productName, sce
               demandDelta === 0 
                 ? "bg-accent/30 border-border/50" 
                 : demandDelta > 0 
-                  ? "bg-destructive/5 border-destructive/20 shadow-[0_0_20px_rgba(239,68,68,0.05)]" 
-                  : "bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.05)]"
+                  ? cn(E.glowDestructive, "bg-destructive/5 border-destructive/20")
+                  : cn(E.glowSuccess, "bg-emerald-500/5 border-emerald-500/20")
             )}>
               <p className={cn(
                 "mb-3",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useTheme } from "next-themes";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { 
   Eye, 
@@ -23,11 +24,13 @@ import {
   RefreshCcw,
   Clock,
   Zap,
-  MapPin
+  MapPin,
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/app/lib/utils";
-import { CHART_COLORS } from "@/app/lib/charts";
+import { CHART_COLORS, CHART_HEIGHT, getAxisProps, getChartColors, getTooltipContentStyle } from "@/app/lib/charts";
 import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
@@ -38,6 +41,7 @@ import { GAP, ICON } from "@/app/lib/spacing";
 import { TABS } from "@/app/lib/nav";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/app/components/ui/tabs";
 import { useTranslation } from "@/app/i18n";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
 import { 
     Radar, 
     RadarChart, 
@@ -120,8 +124,11 @@ const InsightCard = ({ type, title, desc, conf }: { type: InsightType, title: st
   return (
     <div className={cn("p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all bg-white dark:bg-slate-800 relative overflow-hidden group/card", style.bg)}>
       <div className="flex items-center justify-between mb-2.5">
-        <div className={cn("p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm", style.text)}>
-          <style.icon className={ICON.sm} />
+        <div className="flex items-center gap-2">
+          <span className="size-1.5 rounded-full bg-indigo-500 animate-pulse" />
+          <div className={cn("p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm", style.text)}>
+            <style.icon className={ICON.sm} />
+          </div>
         </div>
         <span className={cn("px-1.5 py-0.5 rounded-lg border border-current opacity-70", style.text, T.caption)}>
           {t("xai.confidence")} {conf}%
@@ -134,11 +141,12 @@ const InsightCard = ({ type, title, desc, conf }: { type: InsightType, title: st
 };
 
 export function XAIPage() {
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
   const [isDataLoading, setIsDataLoading] = useState(false);
-
-
-  
+  const chartColors = getChartColors(resolvedTheme as "light" | "dark" | undefined);
+  const axisProps = getAxisProps(resolvedTheme as "light" | "dark" | undefined);
+  const tooltipStyle = getTooltipContentStyle(resolvedTheme as "light" | "dark" | undefined);
   const [selectedProductId, setSelectedProductId] = useState("foto4x6");
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -167,9 +175,7 @@ export function XAIPage() {
       status: t("xai.status.restock"),
       confidence: 92,
       currentDemand: 240,
-      summary: lang === "ID" 
-        ? "Permintaan cetak foto 4x6 diprediksi naik 42% — mendekati musim wisuda dan akhir semester. Siapkan stok kertas foto ekstra sebelum lonjakan tiba."
-        : "Photo 4x6 demand is predicted to rise 42% — approaching graduation season and end of semester. Prepare extra photo paper stock before the surge."
+      summary: t("xai.product.foto4x6.summary")
     },
     { 
       id: "printbw", 
@@ -179,9 +185,7 @@ export function XAIPage() {
       status: t("xai.status.overstock"),
       confidence: 88,
       currentDemand: 310,
-      summary: lang === "ID"
-        ? "Volume print B&W di atas rata-rata 18% minggu ini. Pola berulang tiap awal semester — mahasiswa banyak print modul & tugas. Pertimbangkan diskon bundling 50+ lembar."
-        : "B&W print volume is 18% above average this week. Recurring pattern every semester start — students print many modules & assignments. Consider bundling discount for 50+ pages."
+      summary: t("xai.product.printbw.summary")
     },
     { 
       id: "lamA4", 
@@ -191,38 +195,54 @@ export function XAIPage() {
       status: t("xai.status.safe"),
       confidence: 94,
       currentDemand: 45,
-      summary: lang === "ID"
-        ? "Stok laminasi A4 aman untuk 2 minggu ke depan. Permintaan stabil — mayoritas dari pelanggan instansi & kantor. Tidak ada risiko kehabisan dalam waktu dekat."
-        : "A4 lamination stock is safe for the next 2 weeks. Demand is stable — mostly from institutional & office customers. No risk of running out in the near future."
+      summary: t("xai.product.lamA4.summary")
     }
-  ], [t, lang]);
+  ], [t]);
 
   const FACTORS = useMemo<Record<string, FactorData[]>>(() => ({
     foto4x6: [
-      { label: t("xai.factor.holiday"), value: 45, icon: Calendar, color: "from-amber-400 to-rose-500", desc: "Musim wisuda & akhir semester mendorong permintaan cetak foto naik tajam." },
-      { label: t("xai.factor.payday"), value: 25, icon: Scale, color: "from-amber-300 to-amber-500", desc: "Pelanggan lebih banyak mencetak foto saat gajian / akhir bulan." },
-      { label: t("xai.factor.trend"), value: 15, icon: TrendingUp, color: "from-emerald-400 to-emerald-600", desc: "Tren historis menunjukkan lonjakan rutin setiap semester." },
-      { label: t("xai.factor.location"), value: 10, icon: MapPin, color: "from-slate-300 to-slate-500", desc: "Toko dekat kampus — mayoritas pelanggan mahasiswa." },
-      { label: t("xai.factor.price"), value: 5, icon: ShoppingCart, color: "from-slate-200 to-slate-400", desc: "Harga kompetitif dibanding toko foto terdekat." },
+      { label: t("xai.factor.holiday"), value: 45, icon: Calendar, color: "from-amber-400 to-rose-500", desc: t("xai.factor_desc.foto4x6.holiday") },
+      { label: t("xai.factor.payday"), value: 25, icon: Scale, color: "from-amber-300 to-amber-500", desc: t("xai.factor_desc.foto4x6.payday") },
+      { label: t("xai.factor.trend"), value: 15, icon: TrendingUp, color: "from-emerald-400 to-emerald-600", desc: t("xai.factor_desc.foto4x6.trend") },
+      { label: t("xai.factor.location"), value: 10, icon: MapPin, color: "from-slate-300 to-slate-500", desc: t("xai.factor_desc.foto4x6.location") },
+      { label: t("xai.factor.price"), value: 5, icon: ShoppingCart, color: "from-slate-200 to-slate-400", desc: t("xai.factor_desc.foto4x6.price") },
     ],
     printbw: [
-      { label: t("xai.factor.trend"), value: 40, icon: TrendingUp, color: "from-emerald-400 to-emerald-600", desc: "Awal semester selalu memicu lonjakan print modul & tugas kuliah." },
-      { label: t("xai.factor.location"), value: 25, icon: MapPin, color: "from-amber-300 to-amber-500", desc: "Lalu lintas pelanggan dari kampus & kantor sekitar." },
-      { label: t("xai.factor.promo"), value: 20, icon: Zap, color: "from-indigo-400 to-indigo-600", desc: "Diskon bundling 50+ lembar meningkatkan volume pesanan." },
-      { label: t("xai.factor.payday"), value: 10, icon: Calendar, color: "from-slate-300 to-slate-500", desc: "Instansi & kantor cenderung banyak print di awal bulan." },
-      { label: t("xai.factor.price"), value: 5, icon: Scale, color: "from-slate-200 to-slate-400", desc: "Harga sudah kompetitif, tidak ada tekanan dari pesaing." },
+      { label: t("xai.factor.trend"), value: 40, icon: TrendingUp, color: "from-emerald-400 to-emerald-600", desc: t("xai.factor_desc.printbw.trend") },
+      { label: t("xai.factor.location"), value: 25, icon: MapPin, color: "from-amber-300 to-amber-500", desc: t("xai.factor_desc.printbw.location") },
+      { label: t("xai.factor.promo"), value: 20, icon: Zap, color: "from-indigo-400 to-indigo-600", desc: t("xai.factor_desc.printbw.promo") },
+      { label: t("xai.factor.payday"), value: 10, icon: Calendar, color: "from-slate-300 to-slate-500", desc: t("xai.factor_desc.printbw.payday") },
+      { label: t("xai.factor.price"), value: 5, icon: Scale, color: "from-slate-200 to-slate-400", desc: t("xai.factor_desc.printbw.price") },
     ],
     lamA4: [
-      { label: t("xai.factor.supply"), value: 50, icon: ShoppingCart, color: "from-emerald-400 to-emerald-600", desc: "Stok dari supplier masuk tepat waktu, tidak ada gangguan pasokan." },
-      { label: t("xai.factor.trend"), value: 30, icon: Target, color: "from-slate-300 to-slate-500", desc: "Permintaan laminasi stabil sepanjang tahun dari pelanggan kantoran." },
-      { label: t("xai.factor.holiday"), value: 10, icon: Clock, color: "from-amber-300 to-amber-500", desc: "Sedikit penurunan saat libur panjang — kantor tutup." },
-      { label: t("xai.factor.weather"), value: 10, icon: CloudRain, color: "from-slate-200 to-slate-400", desc: "Cuaca tidak berpengaruh signifikan pada layanan ini." },
+      { label: t("xai.factor.supply"), value: 50, icon: ShoppingCart, color: "from-emerald-400 to-emerald-600", desc: t("xai.factor_desc.lamA4.supply") },
+      { label: t("xai.factor.trend"), value: 30, icon: Target, color: "from-slate-300 to-slate-500", desc: t("xai.factor_desc.lamA4.trend") },
+      { label: t("xai.factor.holiday"), value: 10, icon: Clock, color: "from-amber-300 to-amber-500", desc: t("xai.factor_desc.lamA4.holiday") },
+      { label: t("xai.factor.weather"), value: 10, icon: CloudRain, color: "from-slate-200 to-slate-400", desc: t("xai.factor_desc.lamA4.weather") },
     ]
   }), [t]);
 
   const selectedProduct = useMemo(() => 
     PRODUCTS.find(p => p.id === selectedProductId) || PRODUCTS[0], 
   [selectedProductId, PRODUCTS]);
+  const confidenceLabel =
+    selectedProduct.confidence >= 90
+      ? t("xai.confidence.very_high")
+      : selectedProduct.confidence >= 80
+        ? t("xai.confidence.high")
+        : t("xai.confidence.medium");
+
+  const getStatusIcon = (status: string) => {
+    if (status === t("xai.status.restock")) return AlertTriangle;
+    if (status === t("xai.status.overstock")) return TrendingUp;
+    return CheckCircle2;
+  };
+
+  const getStatusClass = (status: string) => {
+    if (status === t("xai.status.restock")) return "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400";
+    if (status === t("xai.status.overstock")) return "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400";
+    return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
+  };
 
   const adjustedDemand = useMemo(() => {
     let base = selectedProduct.currentDemand;
@@ -234,6 +254,13 @@ export function XAIPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
+      {!isDemoDataEnabled() && (
+        <div className={cn("flex items-start gap-3 px-4 py-3 rounded-xl border bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/50", T.bodySm)}>
+          <AlertCircle className="size-4 shrink-0 mt-0.5 text-amber-500" aria-hidden="true" />
+          <span className="text-amber-700 dark:text-amber-300">{t("xai.demo_notice")}</span>
+        </div>
+      )}
+
       {/* Header Section */}
       <div className={cn("flex flex-col md:flex-row md:items-center justify-between", GAP.default)}>
         <div>
@@ -245,7 +272,7 @@ export function XAIPage() {
           <button
             onClick={handleRefresh}
             disabled={isDataLoading}
-            aria-label="Perbarui analisis"
+            aria-label={t("xai.aria.refresh_analysis")}
             className={btn("neutralSoft", "sm", { icon: true })}
           >
             <RefreshCcw className={cn(ICON.sm, isDataLoading && "animate-spin")} />
@@ -274,7 +301,10 @@ export function XAIPage() {
              <div 
                className={cn(Z.popover, R.md, "absolute top-full left-0 right-0 p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl space-y-1", "animate-in fade-in zoom-in-95 duration-100")}
              >
-                  {PRODUCTS.map(p => (
+                  {PRODUCTS.map(p => {
+                    const StatusIcon = getStatusIcon(p.status);
+
+                    return (
                     <button 
                       key={p.id}
                       onClick={() => { setSelectedProductId(p.id); setShowDropdown(false); }}
@@ -285,14 +315,18 @@ export function XAIPage() {
                     >
                        <div className="flex flex-col text-left">
                           <span className={cn("font-bold text-slate-900 dark:text-slate-100", T.label)}>{p.name}</span>
-                          <span className={cn("text-slate-400 font-data", T.caption)}>Stok: {p.stock}</span>
+                          <span className={cn("text-slate-400 font-data", T.caption)}>{t("xai.stock_label", { stock: p.stock })}</span>
                        </div>
                        <span className={cn(
-                         cn(T.micro, R.xs, "px-1.5 py-0.5"),
-                         p.status === t("xai.status.restock") ? "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400" : p.status === t("xai.status.overstock") ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                       )}>{p.status}</span>
+                         cn(T.micro, R.xs, "inline-flex items-center gap-1 px-1.5 py-0.5"),
+                         getStatusClass(p.status)
+                       )}>
+                         <StatusIcon className="size-3" aria-hidden="true" />
+                         {p.status}
+                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
              </div>
            )}
         </div>
@@ -347,13 +381,13 @@ export function XAIPage() {
                              <div className="p-6 bg-indigo-50/40 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-800/40 relative group overflow-hidden">
                                 <div className="flex items-center justify-between mb-4">
                                    <div className="flex items-center gap-2">
-                                      <span className={cn("bg-indigo-600 text-white px-2 py-0.5 rounded font-bold", T.micro)}>AI Summary</span>
-                                      <span className={cn(T.caption, "font-bold flex items-center gap-1", C.primary.icon)}><Target className="size-3" /> Keyakinan AI: {selectedProduct.confidence >= 90 ? "Sangat Tinggi" : selectedProduct.confidence >= 80 ? "Tinggi" : "Sedang"}</span>
+                                      <span className={cn("bg-indigo-600 text-white px-2 py-0.5 rounded font-bold", T.micro)}>{t("xai.summary.badge")}</span>
+                                      <span className={cn(T.caption, "font-bold flex items-center gap-1", C.primary.icon)}><Target className="size-3" /> {t("xai.confidence.label")}: {confidenceLabel}</span>
                                    </div>
                                     <button 
                                       onClick={() => setShareModalOpen(true)}
                                       className={btn("ghost", "sm", { icon: true })}
-                                      aria-label="Bagikan analisis"
+                                      aria-label={t("xai.aria.share_analysis")}
                                     >
                                        <Share2 className={ICON.sm} />
                                     </button>
@@ -372,10 +406,19 @@ export function XAIPage() {
                                    </div>
                                    <div className="text-center">
                                       <p className={cn(T.label, "text-slate-500 mb-0.5")}>{t("common.status")}</p>
+                                      {(() => {
+                                        const StatusIcon = getStatusIcon(selectedProduct.status);
+
+                                        return (
                                       <span className={cn(
-                                         cn(T.micro, R.xs, "px-1.5 py-0.5"),
-                                         selectedProduct.status === t("xai.status.restock") ? "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400" : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                                      )}>{selectedProduct.status}</span>
+                                         cn(T.micro, R.xs, "inline-flex items-center gap-1 px-1.5 py-0.5"),
+                                         getStatusClass(selectedProduct.status)
+                                      )}>
+                                        <StatusIcon className="size-3" aria-hidden="true" />
+                                        {selectedProduct.status}
+                                      </span>
+                                        );
+                                      })()}
                                    </div>
                                 </div>
                              </div>
@@ -383,8 +426,8 @@ export function XAIPage() {
                              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
                                 <p className={cn("font-bold text-slate-500 italic", T.label)}>{t("xai.feedback.question")}</p>
                                 <div className="flex items-center gap-2">
-                                   <button aria-label="Helpful" className={btn("ghost", "sm", { icon: true })}><ThumbsUp className={cn(ICON.sm, C.success.icon)} /></button>
-                                   <button aria-label="Not helpful" className={btn("ghost", "sm", { icon: true })}><ThumbsDown className={cn(ICON.sm, C.destructive.icon)} /></button>
+                                   <button aria-label={t("xai.feedback.helpful")} className={btn("ghost", "sm", { icon: true })}><ThumbsUp className={cn(ICON.sm, C.success.icon)} /></button>
+                                   <button aria-label={t("xai.feedback.not_helpful")} className={btn("ghost", "sm", { icon: true })}><ThumbsDown className={cn(ICON.sm, C.destructive.icon)} /></button>
                                 </div>
                              </div>
                           </>
@@ -422,7 +465,7 @@ export function XAIPage() {
                        </div>
                        
                        {isDataLoading ? (
-                          <div className="h-[300px] w-full bg-slate-50 animate-pulse rounded-xl" />
+                          <div style={{ height: CHART_HEIGHT.md }} className="w-full bg-slate-50 animate-pulse rounded-xl" />
                        ) : (
                           <div className="grid grid-cols-1 gap-4">
                              <div className={cn(
@@ -436,7 +479,7 @@ export function XAIPage() {
                                       </div>
                                       <div>
                                          <h5 className={cn("font-bold uppercase tracking-tight", T.label)}>{t("xai.sim.promo")}</h5>
-                                         <p className={cn("opacity-70", isPromo ? "text-indigo-100" : "text-slate-400", T.caption)}>Dampak kampanye diskon.</p>
+                                         <p className={cn("opacity-70", isPromo ? "text-indigo-100" : "text-slate-400", T.caption)}>{t("xai.sim.promo_desc")}</p>
                                       </div>
                                    </div>
                                     <button 
@@ -452,7 +495,7 @@ export function XAIPage() {
                                 {isPromo && (
                                    <div className="space-y-2 animate-in slide-in-from-top-1">
                                       <div className={cn(T.label, "flex items-center justify-between")}>
-                                         <span>Level Diskon</span>
+                                         <span>{t("xai.sim.discount_level")}</span>
                                          <span className={cn(T.dataSm)}>{discount}%</span>
                                       </div>
                                        <input 
@@ -470,10 +513,10 @@ export function XAIPage() {
 
                     <div className="flex flex-col justify-center gap-6">
                        {isDataLoading ? (
-                          <div className="h-[300px] w-full bg-slate-50 animate-pulse rounded-xl" />
+                          <div style={{ height: CHART_HEIGHT.md }} className="w-full bg-slate-50 animate-pulse rounded-xl" />
                        ) : (
                           <div className="p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 relative overflow-hidden group shadow-sm">
-                             <h4 className={cn(T.h4, "text-slate-500 mb-6")}>Analisis Dampak</h4>
+                             <h4 className={cn(T.h4, "text-slate-500 mb-6")}>{t("xai.sim.impact_analysis")}</h4>
                              <div className="flex items-center justify-between mb-6">
                                 <div className="space-y-0.5">
                                    <p className={cn(T.label, "text-slate-500")}>{t("xai.sim.baseline")}</p>
@@ -494,7 +537,7 @@ export function XAIPage() {
           </TabsContent>
 
           <TabsContent value="Compare" className="p-8 mt-0">
-            <ErrorBoundary compact sectionName="Compare Charts">
+            <ErrorBoundary compact sectionName={t("xai.section.compare_charts")}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     <div className="space-y-6">
                        <div className="space-y-1">
@@ -502,17 +545,17 @@ export function XAIPage() {
                            <p className={cn(T.caption, "text-slate-400 italic")}>{t("xai.chart.radar.desc")}</p>
                        </div>
                        {isDataLoading ? (
-                         <div className="h-[300px] w-full bg-slate-50 rounded-xl animate-pulse" />
+                         <div style={{ height: CHART_HEIGHT.md }} className="w-full bg-slate-50 rounded-xl animate-pulse" />
                        ) : (
-                         <div className="h-[320px] w-full bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700 rounded-xl p-4 flex items-center justify-center shadow-inner">
+                         <div style={{ height: CHART_HEIGHT.mlg }} className="w-full bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700 rounded-xl p-4 flex items-center justify-center shadow-inner">
                             <ResponsiveContainer debounce={200} width="100%" height="100%">
                                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={[
                                  { subject: t("xai.factor.payday"), A: 120, fullMark: 150 },
                                  { subject: t("xai.factor.promo"), A: 98, fullMark: 150 },
                                  { subject: t("xai.factor.trend"), A: 99, fullMark: 150 },
                                ]}>
-                                 <PolarGrid stroke={CHART_COLORS.cursor.line} />
-                                 <PolarAngleAxis dataKey="subject" tick={{fill: CHART_COLORS.axis.tickLight, fontSize: 8, fontWeight: 700}} />
+                                 <PolarGrid stroke={chartColors.cursorLine} />
+                                 <PolarAngleAxis dataKey="subject" tick={{fill: chartColors.axisTick, fontSize: 8, fontWeight: 700}} />
                                  <Radar name={t("xai.chart.radar.impact")} dataKey="A" stroke={CHART_COLORS.primary.base} fill={CHART_COLORS.primary.base} fillOpacity={0.6} />
                                </RadarChart>
                             </ResponsiveContainer>
@@ -525,18 +568,18 @@ export function XAIPage() {
                           <h3 className={cn(T.h3, "text-slate-900 dark:text-slate-100")}>{t("xai.chart.bench.title")}</h3>
                            <p className={cn(T.caption, "text-slate-400")}>{t("xai.chart.bench.desc")}</p>
                        </div>
-                       <div className="h-[180px] w-full">
+                       <div style={{ height: CHART_HEIGHT.sm }} className="w-full">
                           {isDataLoading ? (
                              <div className="h-full bg-slate-50 animate-pulse rounded-xl" />
                           ) : (
                              <ResponsiveContainer debounce={200} width="100%" height="100%">
                                <BarChart data={[
                                     { name: t("xai.tab.global"), acc: 94, fill: CHART_COLORS.primary.base },
-                                    { name: t("inv.stats.total"), acc: 88, fill: CHART_COLORS.cursor.line },
+                                    { name: t("inv.stats.total"), acc: 88, fill: chartColors.cursorLine },
                                ]} layout="vertical">
                                  <XAxis type="number" hide />
-                                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: CHART_COLORS.axis.tickLight, fontSize: 9, fontWeight: 700}} width={100} />
-                                 <Tooltip cursor={{fill: 'transparent'}} />
+                                 <YAxis dataKey="name" type="category" {...axisProps} tick={{...axisProps.tick, fontSize: 9, fontWeight: 700}} width={100} />
+                                 <Tooltip cursor={{fill: 'transparent'}} contentStyle={tooltipStyle} />
                                  <Bar dataKey="acc" radius={[0, 8, 8, 0]} barSize={24} />
                                </BarChart>
                              </ResponsiveContainer>
@@ -561,10 +604,10 @@ export function XAIPage() {
                          ))
                        ) : (
                          <>
-                            <InsightCard type="Pola" title="Pola Musim Wisuda" desc="Graduation season pattern" conf={96} />
-                            <InsightCard type="Anomali" title="Lonjakan Print Warna" desc="Color print surge" conf={82} />
-                            <InsightCard type="Risiko" title="Stok Kertas Menipis" desc="Paper stock low" conf={91} />
-                            <InsightCard type="Peluang" title="Bundling Print + Jilid" desc="Bundling opportunity" conf={88} />
+                            <InsightCard type="Pola" title={t("xai.insight.pattern_graduation.title")} desc={t("xai.insight.pattern_graduation.desc")} conf={96} />
+                            <InsightCard type="Anomali" title={t("xai.insight.color_print_surge.title")} desc={t("xai.insight.color_print_surge.desc")} conf={82} />
+                            <InsightCard type="Risiko" title={t("xai.insight.paper_stock_low.title")} desc={t("xai.insight.paper_stock_low.desc")} conf={91} />
+                            <InsightCard type="Peluang" title={t("xai.insight.print_binding_bundle.title")} desc={t("xai.insight.print_binding_bundle.desc")} conf={88} />
                          </>
                        )}
                     </div>
@@ -575,11 +618,11 @@ export function XAIPage() {
                           <div className="flex items-center gap-5 relative z-10">
                              <div className="size-12 bg-white/20 rounded-lg flex items-center justify-center border border-white/20 shadow-inner"><Zap className="size-6" /></div>
                               <div>
-                                 <h4 className={cn(T.h4, "mb-0.5")}>{lang === "ID" ? "Butuh Rekomendasi Lanjutan?" : "Need Advanced Recommendations?"}</h4>
-                                 <p className={cn(T.caption, "text-indigo-100")}>{lang === "ID" ? "Eksplorasi korelasi lintas-produk dengan Advanced Analytics." : "Explore cross-product correlations with Advanced Analytics."}</p>
+                                 <h4 className={cn(T.h4, "mb-0.5")}>{t("xai.advanced.title")}</h4>
+                                 <p className={cn(T.caption, "text-indigo-100")}>{t("xai.advanced.desc")}</p>
                               </div>
                            </div>
-                           <button onClick={() => toast.info(lang === "ID" ? "Fitur ini sedang dalam pengembangan" : "This feature is under development")} className={cn(btn("neutral", "md"), "bg-white text-indigo-600 hover:bg-slate-50 relative z-10 shadow-md hover:-translate-y-0.5")}>{lang === "ID" ? "Buka Analisis Lanjut" : "Open Advanced Analysis"}</button>
+                           <button onClick={() => toast.info(t("xai.advanced.in_development"))} className={cn(btn("neutral", "md"), "bg-white text-indigo-600 hover:bg-slate-50 relative z-10 shadow-md hover:-translate-y-0.5")}>{t("xai.advanced.open")}</button>
                        </div>
                     )}
                  </div>

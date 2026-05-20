@@ -19,7 +19,7 @@ import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
 import { R } from "@/app/lib/radii";
 import { useTranslation } from "@/app/i18n";
-import { CHART_COLORS } from "@/app/lib/charts";
+import { CHART_COLORS, CHART_HEIGHT } from "@/app/lib/charts";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/app/components/charts/StableResponsiveContainer";
 
 interface FactorInput {
@@ -53,7 +53,7 @@ export function FactorRadarProfile({ factors }: { factors: FactorInput[] }) {
         </p>
       </div>
 
-      <div className="flex-1 min-h-[260px] w-full">
+      <div style={{ minHeight: CHART_HEIGHT.md }} className="flex-1 w-full">
         <ResponsiveContainer debounce={200} width="100%" height="100%">
           <RadarChart data={radarData}>
             <PolarGrid stroke="var(--border)" />
@@ -115,7 +115,7 @@ export function AccuracyBench({ similarProducts }: { similarProducts: SimilarPro
         </p>
       </div>
 
-      <div className="flex-1 min-h-[260px] w-full">
+      <div style={{ minHeight: CHART_HEIGHT.md }} className="flex-1 w-full">
         <ResponsiveContainer debounce={200} width="100%" height="100%">
           <BarChart data={compData} layout="vertical" margin={{ left: -20, right: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" horizontal={false} />

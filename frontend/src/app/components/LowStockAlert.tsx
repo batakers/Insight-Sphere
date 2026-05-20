@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AlertTriangle, ChevronRight, Package, TrendingUp } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
@@ -8,6 +9,9 @@ import { R } from "@/app/lib/radii";
 import { E } from "@/app/lib/elevation";
 import { useTranslation } from "@/app/i18n";
 import Link from "next/link";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import { useAuth } from "@/app/context/AuthContext";
+import { fetchLowStockAlerts, type InventoryStockItem } from "@/app/lib/dashboard-client";
 
 interface LowStockItem {
   id: string;
@@ -19,15 +23,41 @@ interface LowStockItem {
   restockRecommendation: number;
 }
 
-const MOCK_LOW_STOCK: LowStockItem[] = [
-  { id: "1", name: "Minyak SunCo 2L", sku: "M019", currentStock: 5, minThreshold: 40, unit: "botol", restockRecommendation: 80 },
-  { id: "2", name: "Minuman Isotonik Mizone", sku: "M006", currentStock: 12, minThreshold: 40, unit: "botol", restockRecommendation: 60 },
-  { id: "3", name: "Indomie Goreng (Karton)", sku: "I003", currentStock: 15, minThreshold: 20, unit: "karton", restockRecommendation: 40 },
-  { id: "4", name: "Susu Ultra 1L", sku: "S004", currentStock: 45, minThreshold: 40, unit: "pcs", restockRecommendation: 80 },
-];
+const mapApiItem = (i: InventoryStockItem): LowStockItem => ({
+  id: i.id,
+  name: i.product_name ?? `Product ${i.product_id.slice(0, 8)}`,
+  sku: i.product_sku ?? i.id.slice(0, 8),
+  currentStock: i.current_stock,
+  minThreshold: i.min_stock,
+  unit: i.product_unit ?? "unit",
+  restockRecommendation: Math.max(0, i.reorder_point - i.current_stock),
+});
 
 export function LowStockAlert() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+
+    let cancelled = false;
+    void import("@/app/demo/low-stock").then(({ DEMO_LOW_STOCK }) => {
+      if (!cancelled) setLowStockItems(DEMO_LOW_STOCK);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isDemoDataEnabled()) return;
+    void fetchLowStockAlerts(user?.storeNbr ?? undefined, 100)
+      .then((items) => setLowStockItems(items.map(mapApiItem)))
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.storeNbr]);
 
   return (
     <div className={cn(R.md, E.sm, "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 overflow-hidden")}>
@@ -37,12 +67,12 @@ export function LowStockAlert() {
           {t("dash.section.low_stock")}
         </h3>
         <span className={cn(T.caption, "text-slate-400")}>
-          {MOCK_LOW_STOCK.length} item
+          {lowStockItems.length} item
         </span>
       </div>
 
       <div className="divide-y divide-slate-50 dark:divide-slate-800">
-        {MOCK_LOW_STOCK.map((item) => {
+        {lowStockItems.map((item) => {
           const pct = Math.round((item.currentStock / item.minThreshold) * 100);
           const isUrgent = pct < 30;
 

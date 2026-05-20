@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Download,
@@ -24,8 +24,11 @@ import { C } from "@/app/lib/colors";
 import { R } from "@/app/lib/radii";
 import { E } from "@/app/lib/elevation";
 import { TABLE } from "@/app/lib/data";
+import { MODAL } from "@/app/lib/containers";
 import { formatRupiah } from "@/app/lib/format";
 import { useTranslation } from "@/app/i18n";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import { TRANSACTION_PAGE_SIZE } from "@/app/domain/constants";
 import { toast } from "sonner";
 import { INPUT } from "@/app/lib/forms";
 import { GAP, ICON } from "@/app/lib/spacing";
@@ -59,181 +62,26 @@ interface Transaction {
 type DateRange = "today" | "week" | "month" | "custom";
 type PaymentFilter = "all" | "CASH" | "QRIS";
 
-// ─── Mock Data ───────────────────────────────────────────────────────
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: "TXN-20260422-001",
-    date: "2026-04-22",
-    time: "14:32:15",
-    items: [
-      { productName: "Print Dokumen B&W A4", sku: "PR-BW", quantity: 25, unitPrice: 500, subtotal: 12500 },
-      { productName: "Fotokopi A4", sku: "FK-A4", quantity: 15, unitPrice: 300, subtotal: 4500 },
-    ],
-    totalItems: 40,
-    total: 17000,
-    paymentMethod: "CASH",
-    cashReceived: 20000,
-    change: 3000,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260422-002",
-    date: "2026-04-22",
-    time: "13:18:44",
-    items: [
-      { productName: "Cetak Foto 4R", sku: "CF-4R", quantity: 5, unitPrice: 3500, subtotal: 17500 },
-      { productName: "Laminasi A4", sku: "LM-A4", quantity: 2, unitPrice: 5000, subtotal: 10000 },
-    ],
-    totalItems: 7,
-    total: 27500,
-    paymentMethod: "QRIS",
-    cashReceived: 27500,
-    change: 0,
-    cashierName: "Kasir-02",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260422-003",
-    date: "2026-04-22",
-    time: "11:05:22",
-    items: [
-      { productName: "Print Warna A4", sku: "PR-WN", quantity: 8, unitPrice: 1500, subtotal: 12000 },
-      { productName: "Jilid Spiral A4", sku: "JL-SP", quantity: 1, unitPrice: 8000, subtotal: 8000 },
-    ],
-    totalItems: 9,
-    total: 20000,
-    paymentMethod: "CASH",
-    cashReceived: 20000,
-    change: 0,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #2 — Barat",
-  },
-  {
-    id: "TXN-20260421-001",
-    date: "2026-04-21",
-    time: "16:45:11",
-    items: [
-      { productName: "Cetak Foto 3x4 cm", sku: "CF-3X4", quantity: 10, unitPrice: 2000, subtotal: 20000 },
-      { productName: "Scan Dokumen A4", sku: "SC-A4", quantity: 5, unitPrice: 2000, subtotal: 10000 },
-      { productName: "Print Dokumen B&W A4", sku: "PR-BW", quantity: 20, unitPrice: 500, subtotal: 10000 },
-    ],
-    totalItems: 35,
-    total: 40000,
-    paymentMethod: "CASH",
-    cashReceived: 50000,
-    change: 10000,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260421-002",
-    date: "2026-04-21",
-    time: "10:22:05",
-    items: [
-      { productName: "Stiker Vinyl A4", sku: "ST-VN", quantity: 2, unitPrice: 15000, subtotal: 30000 },
-      { productName: "Edit File Desain", sku: "JS-ED", quantity: 1, unitPrice: 25000, subtotal: 25000 },
-    ],
-    totalItems: 3,
-    total: 55000,
-    paymentMethod: "QRIS",
-    cashReceived: 55000,
-    change: 0,
-    cashierName: "Kasir-02",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260420-001",
-    date: "2026-04-20",
-    time: "15:30:08",
-    items: [
-      { productName: "Fotokopi A4", sku: "FK-A4", quantity: 30, unitPrice: 300, subtotal: 9000 },
-      { productName: "Print Dokumen B&W A4", sku: "PR-BW", quantity: 30, unitPrice: 500, subtotal: 15000 },
-      { productName: "Laminasi F4", sku: "LM-F4", quantity: 3, unitPrice: 7000, subtotal: 21000 },
-    ],
-    totalItems: 63,
-    total: 45000,
-    paymentMethod: "CASH",
-    cashReceived: 50000,
-    change: 5000,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260419-001",
-    date: "2026-04-19",
-    time: "09:15:38",
-    items: [
-      { productName: "Jilid Hard Cover A4", sku: "JL-HC", quantity: 2, unitPrice: 35000, subtotal: 70000 },
-      { productName: "Print Warna A4", sku: "PR-WN", quantity: 15, unitPrice: 1500, subtotal: 22500 },
-      { productName: "Cetak Foto 4x6 cm", sku: "CF-4X6", quantity: 8, unitPrice: 3000, subtotal: 24000 },
-    ],
-    totalItems: 25,
-    total: 116500,
-    paymentMethod: "QRIS",
-    cashReceived: 116500,
-    change: 0,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260418-001",
-    date: "2026-04-18",
-    time: "13:44:21",
-    items: [
-      { productName: "Print Dokumen B&W A4", sku: "PR-BW", quantity: 50, unitPrice: 500, subtotal: 25000 },
-      { productName: "Fotokopi A4", sku: "FK-A4", quantity: 20, unitPrice: 300, subtotal: 6000 },
-      { productName: "Jilid Spiral A4", sku: "JL-SP", quantity: 2, unitPrice: 8000, subtotal: 16000 },
-    ],
-    totalItems: 72,
-    total: 47000,
-    paymentMethod: "CASH",
-    cashReceived: 50000,
-    change: 3000,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #2 — Barat",
-  },
-  {
-    id: "TXN-20260418-002",
-    date: "2026-04-18",
-    time: "10:08:55",
-    items: [
-      { productName: "Cetak Foto 4R", sku: "CF-4R", quantity: 20, unitPrice: 3500, subtotal: 70000 },
-      { productName: "Laminasi A4", sku: "LM-A4", quantity: 5, unitPrice: 5000, subtotal: 25000 },
-    ],
-    totalItems: 25,
-    total: 95000,
-    paymentMethod: "QRIS",
-    cashReceived: 95000,
-    change: 0,
-    cashierName: "Kasir-02",
-    branchName: "Cabang #1 — Pusat",
-  },
-  {
-    id: "TXN-20260417-001",
-    date: "2026-04-17",
-    time: "11:30:00",
-    items: [
-      { productName: "Print Poster A3", sku: "PR-A3", quantity: 3, unitPrice: 12000, subtotal: 36000 },
-      { productName: "Stiker Vinyl A4", sku: "ST-VN", quantity: 4, unitPrice: 15000, subtotal: 60000 },
-    ],
-    totalItems: 7,
-    total: 96000,
-    paymentMethod: "CASH",
-    cashReceived: 100000,
-    change: 4000,
-    cashierName: "Kasir-01",
-    branchName: "Cabang #1 — Pusat",
-  },
-];
 
 // ─── Component ───────────────────────────────────────────────────────
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = TRANSACTION_PAGE_SIZE;
 
-function exportToCSV(data: Transaction[], filename: string) {
-  const headers = ["ID Transaksi", "Tanggal", "Waktu", "Total Item", "Total (Rp)", "Metode Bayar", "Kasir", "Cabang"];
+function exportToCSV(
+  data: Transaction[],
+  filename: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  const headers = [
+    t("txn.export.headers.id"),
+    t("txn.export.headers.date"),
+    t("txn.export.headers.time"),
+    t("txn.export.headers.items"),
+    t("txn.export.headers.total", { currency: t("common.currency.rupiah") }),
+    t("txn.export.headers.method"),
+    t("txn.export.headers.cashier"),
+    t("txn.export.headers.branch"),
+  ];
   const rows = data.map(t => [
     t.id, t.date, t.time, t.totalItems, t.total, t.paymentMethod, t.cashierName, t.branchName
   ]);
@@ -255,13 +103,24 @@ export function TransactionHistoryPage() {
   const [dateRange, setDateRange] = useState<DateRange>("month");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  /* ---- Demo mode: lazy-load transactions fixture only when explicitly enabled ---- */
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+    let cancelled = false;
+    void import("@/app/demo/transactions").then(({ DEMO_TRANSACTIONS }) => {
+      if (!cancelled) setTransactions(DEMO_TRANSACTIONS as unknown as Transaction[]);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Detail modal
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null);
 
   // Filtered data
   const filtered = useMemo(() => {
-    return MOCK_TRANSACTIONS.filter((txn) => {
+    return transactions.filter((txn) => {
       const matchSearch = txn.id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchPayment = paymentFilter === "all" || txn.paymentMethod === paymentFilter;
       return matchSearch && matchPayment;
@@ -290,7 +149,7 @@ export function TransactionHistoryPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { exportToCSV(filtered, `transaksi-${new Date().toISOString().slice(0,10)}.csv`); toast.success(t("txn.toast.csv")); }}
+            onClick={() => { exportToCSV(filtered, `transaksi-${new Date().toISOString().slice(0,10)}.csv`, t); toast.success(t("txn.toast.csv")); }}
             className={btn("neutralSoft", "md")}
           >
             <Download className={ICON.sm} /> {t("txn.export.csv")}
@@ -381,14 +240,14 @@ export function TransactionHistoryPage() {
         {/* Transaction Table */}
         {paginated.length > 0 ? (
           <ResponsiveTable
-            label="Riwayat transaksi"
+            label={t("txn.header")}
             scrollerClassName="rounded-none border-0 bg-transparent"
-            minWidthClassName="min-w-[940px]"
+            minWidthClassName={TABLE.minWidth.transaction}
           >
-            <table className={TABLE.base} aria-label="Riwayat transaksi">
+            <table className={TABLE.base} aria-label={t("txn.header")}>
               <thead className={TABLE.head}>
                 <tr>
-                  <th className={cn(TABLE.headCell, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>{t("txn.table.id")}</th>
+                  <th className={cn(TABLE.headCell, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")}>{t("txn.table.id")}</th>
                   <th className={TABLE.headCell}>{t("txn.table.date")}</th>
                   <th className={TABLE.headCellNumeric}>{t("txn.table.items")}</th>
                   <th className={TABLE.headCellNumeric}>{t("txn.table.total")}</th>
@@ -400,7 +259,7 @@ export function TransactionHistoryPage() {
               <tbody className={TABLE.body}>
                 {paginated.map((txn) => (
                   <tr key={txn.id} className={cn(TABLE.row, TABLE.rowHover, "group")}>
-                    <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                    <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                       <span className={cn(T.code, C.primary.icon)}>{txn.id}</span>
                     </td>
                     <td className={TABLE.cell}>
@@ -499,7 +358,7 @@ export function TransactionHistoryPage() {
           onClick={(e) => { if (e.currentTarget === e.target) setSelectedTxn(null); }}
         >
           <div
-            className={cn(R.xl, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 flex flex-col max-h-[85vh]")}
+            className={cn(R.xl, E["2xl"], "bg-white dark:bg-slate-900 w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 flex flex-col", MODAL.maxHeight.md)}
             role="dialog"
             aria-modal="true"
             aria-labelledby="txn-detail-title"
@@ -545,7 +404,7 @@ export function TransactionHistoryPage() {
                   <ResponsiveTable
                     label={`${t("txn.detail.title")} ${selectedTxn.id}`}
                     scrollerClassName="rounded-none border-0 bg-transparent"
-                    minWidthClassName="min-w-[480px] sm:min-w-full"
+                    minWidthClassName={TABLE.minWidth.detailCompact}
                   >
                     <table className={TABLE.base} aria-label={`${t("txn.detail.title")} ${selectedTxn.id}`}>
                     <thead className="bg-slate-100/50 dark:bg-slate-700/50">

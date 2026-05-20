@@ -20,7 +20,7 @@ interface StockUpdateModalProps {
     unit: string;
   };
   onClose: () => void;
-  onSubmit: (data: { type: StockUpdateType; quantity: number; reason: string }) => void;
+  onSubmit: (data: { type: StockUpdateType; quantity: number; reason: string }) => void | Promise<void>;
 }
 
 export function StockUpdateModal({ product, onClose, onSubmit }: StockUpdateModalProps) {

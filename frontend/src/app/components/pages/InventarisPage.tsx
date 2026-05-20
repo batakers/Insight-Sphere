@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { 
   Plus, 
   Upload, 
@@ -52,6 +52,11 @@ import { StockOpnameModal } from "../inventory/StockOpnameModal";
 import { StockTransferModal } from "../inventory/StockTransferModal";
 import { ExcelImportModal, ImportProductRow } from "../inventory/ExcelImportModal";
 import { useInventoryDeductions } from "@/app/stores/inventoryStore";
+import { useAuth } from "@/app/context/AuthContext";
+// api/ApiError/toQuery available via invClient if needed
+import * as invClient from "@/app/lib/inventory-client";
+import type { BackendInventoryItem, BackendStockSummary } from "@/app/lib/inventory-client";
+import type { ProductFormData } from "@/app/components/inventory/ProductForm";
 import { cn } from "@/app/lib/utils";
 import { C } from "@/app/lib/colors";
 import { TABLE } from "@/app/lib/data";
@@ -68,13 +73,22 @@ import { A11Y } from "@/app/lib/a11y";
 import { useDebounce } from "@/app/hooks/useDebounce";
 import { useModalA11y } from "@/app/hooks/useModalA11y";
 import { StatsSkeleton, InventoryTableSkeleton } from "../Skeletons";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import {
+  INVENTORY_STOCK_STATUS,
+  INVENTORY_UNITS,
+  type InventoryStockStatus,
+} from "@/app/domain/constants";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 // --- Types ---
 
 interface Product {
-  id: string;
+  id: string;                  // product_id from backend
+  inventory_id: string | null; // inventory record id (for stock movement)
   sku: string;
   name: string;
+  family: string;
   category: string;
   location: string;
   stock: number;
@@ -84,27 +98,50 @@ interface Product {
   supplier: string;
   lastRestock: string;
   price: number;
-  avgDailyDemand: number; 
-  trend: number[];        
+  avgDailyDemand: number;
+  daysRemaining: number;       // from backend or computed
+  trend: number[];
 }
 
-// --- Mock Data ---
+function mapBackendInventory(inv: BackendInventoryItem): Product {
+  const stock = inv.current_stock;
+  const days = inv.days_remaining ?? (stock > 0 ? stock : 0);
+  return {
+    id: inv.product_id,
+    inventory_id: inv.id,
+    sku: inv.product_sku ?? "",
+    name: inv.product_name ?? "",
+    family: inv.product_family ?? "",
+    category: inv.product_category ?? "",
+    location: inv.location ?? "—",
+    stock,
+    minStock: inv.min_stock,
+    maxStock: inv.max_stock,
+    reorderPoint: inv.reorder_point,
+    supplier: "",
+    lastRestock: inv.last_restock_date ?? "",
+    price: inv.product_price ?? 0,
+    avgDailyDemand: days > 0 && stock > 0 ? Math.ceil(stock / days) : 1,
+    daysRemaining: days,
+    trend: [],
+  };
+}
 
-const MOCK_PRODUCTS: Product[] = [
-  { id: "1", sku: "B001", name: "Beras Premium 5kg", category: "SEMBAKO", location: "Rak A1", stock: 120, minStock: 50, maxStock: 500, reorderPoint: 80, supplier: "PT Beras Nusantara", lastRestock: "2026-04-10", price: 65000, avgDailyDemand: 45, trend: [240, 210, 190, 160, 140, 130, 120] },
-  { id: "2", sku: "T002", name: "Teh Botol Sosro 450ml", category: "MINUMAN", location: "Rak B2", stock: 180, minStock: 50, maxStock: 300, reorderPoint: 100, supplier: "PT Sinar Sosro", lastRestock: "2026-04-12", price: 5500, avgDailyDemand: 12, trend: [200, 195, 190, 188, 185, 182, 180] },
-  { id: "3", sku: "I003", name: "Indomie Goreng (Karton)", category: "MIE INSTAN", location: "Rak A3", stock: 15, minStock: 20, maxStock: 100, reorderPoint: 40, supplier: "PT Indofood", lastRestock: "2026-04-05", price: 115000, avgDailyDemand: 8, trend: [50, 42, 35, 28, 22, 18, 15] },
-  { id: "4", sku: "S004", name: "Susu Ultra 1L", category: "DAIRY", location: "Freezer F1", stock: 240, minStock: 40, maxStock: 1000, reorderPoint: 80, supplier: "PT Ultra Jaya", lastRestock: "2026-04-14", price: 18500, avgDailyDemand: 40, trend: [350, 320, 300, 280, 265, 250, 240] },
-  { id: "5", sku: "C005", name: "Chitato Original 68g", category: "SNACK", location: "Rak C1", stock: 68, minStock: 30, maxStock: 200, reorderPoint: 60, supplier: "PT Indofood CBP", lastRestock: "2026-04-11", price: 12000, avgDailyDemand: 15, trend: [120, 110, 100, 90, 82, 75, 68] },
-  { id: "6", sku: "M006", name: "Minuman Isotonik Mizone", category: "MINUMAN", location: "Rak B2", stock: 12, minStock: 40, maxStock: 200, reorderPoint: 70, supplier: "PT Danone Indonesia", lastRestock: "2026-03-28", price: 6000, avgDailyDemand: 10, trend: [45, 40, 35, 30, 22, 15, 12] },
-  { id: "19", sku: "M019", name: "Minyak SunCo 2L", category: "SEMBAKO", location: "Rak A2", stock: 5, minStock: 40, maxStock: 200, reorderPoint: 80, supplier: "PT Musim Mas", lastRestock: "2026-03-25", price: 38000, avgDailyDemand: 30, trend: [60, 50, 42, 35, 20, 10, 5] },
-  { id: "20", sku: "N020", name: "Nestle Koko Krunch", category: "CEREAL", location: "Rak C3", stock: 85, minStock: 15, maxStock: 100, reorderPoint: 30, supplier: "PT Nestle Indonesia", lastRestock: "2026-04-04", price: 42000, avgDailyDemand: 2, trend: [95, 93, 91, 90, 88, 87, 85] },
+const INVENTORY_STATUS_TABS: InventoryStockStatus[] = [
+  INVENTORY_STOCK_STATUS.all,
+  INVENTORY_STOCK_STATUS.safe,
+  INVENTORY_STOCK_STATUS.thin,
+  INVENTORY_STOCK_STATUS.critical,
 ];
 
 export function InventarisPage() {
   const { t } = useTranslation();
+  const { user: currentUser } = useAuth();
   const [isDataLoading, setIsDataLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("Semua");
+  const [loadError, setLoadError] = useState("");
+  const [apiProducts, setApiProducts] = useState<Product[]>([]);
+  const [apiSummary, setApiSummary] = useState<BackendStockSummary | null>(null);
+  const [activeTab, setActiveTab] = useState<InventoryStockStatus>(INVENTORY_STOCK_STATUS.all);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -117,6 +154,7 @@ export function InventarisPage() {
   const [opnameOpen, setOpnameOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [demoProducts, setDemoProducts] = useState<Product[]>([]);
   const [importedProducts, setImportedProducts] = useState<Product[]>([]);
   const stockDeductions = useInventoryDeductions();
   const [currentPage, setCurrentPage] = useState(1);
@@ -136,29 +174,54 @@ export function InventarisPage() {
     containerRef: drawerRef,
   });
 
-  const getDaysLeft = (p: Product) => Math.floor(p.stock / (p.avgDailyDemand || 1));
+  useEffect(() => {
+    if (isDemoDataEnabled()) {
+      let cancelled = false;
+      void import("@/app/demo/inventory-products").then(({ DEMO_INVENTORY_PRODUCTS }) => {
+        if (!cancelled) setDemoProducts(DEMO_INVENTORY_PRODUCTS.map(p => ({ ...p, inventory_id: null, family: "", daysRemaining: Math.floor(p.stock / (p.avgDailyDemand || 1)) })));
+      });
+      return () => { cancelled = true; };
+    }
+
+    setIsDataLoading(true);
+    const storeNbr = currentUser?.storeNbr ?? undefined;
+    Promise.all([
+      invClient.fetchInventoryStock({ store_nbr: storeNbr, limit: 500 }),
+      invClient.fetchStockSummary(storeNbr),
+    ])
+      .then(([stockItems, summary]) => {
+        setApiProducts(stockItems.map(mapBackendInventory));
+        setApiSummary(summary);
+        setLoadError("");
+      })
+      .catch(() => setLoadError(t("common.error_loading")))
+      .finally(() => setIsDataLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.storeNbr]);
+
+  const getDaysLeft = (p: Product) => p.daysRemaining > 0 ? Math.floor(p.daysRemaining) : Math.floor(p.stock / (p.avgDailyDemand || 1));
   
   const getStatus = (p: Product) => {
     const daysLeft = getDaysLeft(p);
-    if (daysLeft < 3) return "Kritis";
-    if (daysLeft < 7) return "Menipis";
-    return "Aman";
+    if (daysLeft < 3) return INVENTORY_STOCK_STATUS.critical;
+    if (daysLeft < 7) return INVENTORY_STOCK_STATUS.thin;
+    return INVENTORY_STOCK_STATUS.safe;
   };
 
   const getTranslatedStatus = (status: string) => {
-    if (status === "Kritis") return t("inv.stats.critical");
-    if (status === "Menipis") return t("inv.stats.thin");
-    if (status === "Aman") return t("inv.stats.safe");
+    if (status === INVENTORY_STOCK_STATUS.critical) return t("inv.stats.critical");
+    if (status === INVENTORY_STOCK_STATUS.thin) return t("inv.stats.thin");
+    if (status === INVENTORY_STOCK_STATUS.safe) return t("inv.stats.safe");
     return status;
   };
 
-  const allProducts = useMemo(
-    () => [...MOCK_PRODUCTS, ...importedProducts].map(p => ({
+  const allProducts = useMemo(() => {
+    if (!isDemoDataEnabled()) return apiProducts;
+    return [...demoProducts, ...importedProducts].map(p => ({
       ...p,
       stock: Math.max(0, p.stock - (stockDeductions[p.sku] ?? 0)),
-    })),
-    [importedProducts, stockDeductions]
-  );
+    }));
+  }, [demoProducts, importedProducts, apiProducts, stockDeductions]);
 
   const filteredProducts = useMemo(() => {
     const q = debouncedSearchQuery.toLowerCase();
@@ -166,7 +229,7 @@ export function InventarisPage() {
       const matchSearch = p.name.toLowerCase().includes(q) || 
                           p.sku.toLowerCase().includes(q);
       const status = getStatus(p);
-      const matchTab = activeTab === "Semua" || status === activeTab;
+      const matchTab = activeTab === INVENTORY_STOCK_STATUS.all || status === activeTab;
       return matchSearch && matchTab;
     });
     return [...filtered].sort((a, b) => {
@@ -183,11 +246,20 @@ export function InventarisPage() {
   }, [allProducts, debouncedSearchQuery, activeTab, sortField, sortDir]);
 
   const stats = useMemo(() => {
-    const critical = allProducts.filter(p => getStatus(p) === "Kritis").length;
-    const thin = allProducts.filter(p => getStatus(p) === "Menipis").length;
-    const safe = allProducts.filter(p => getStatus(p) === "Aman").length;
+    if (!isDemoDataEnabled() && apiSummary) {
+      return {
+        total: apiSummary.total_products,
+        safe: apiSummary.safe,
+        thin: apiSummary.low,
+        critical: apiSummary.critical,
+      };
+    }
+    const critical = allProducts.filter(p => getStatus(p) === INVENTORY_STOCK_STATUS.critical).length;
+    const thin = allProducts.filter(p => getStatus(p) === INVENTORY_STOCK_STATUS.thin).length;
+    const safe = allProducts.filter(p => getStatus(p) === INVENTORY_STOCK_STATUS.safe).length;
     return { total: allProducts.length, safe, thin, critical };
-  }, [allProducts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allProducts, apiSummary]);
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -242,6 +314,17 @@ export function InventarisPage() {
         </div>
       </div>
 
+      {isDataLoading && (
+        <div className={cn(T.bodySm, "flex items-center gap-2 text-slate-400 dark:text-slate-500")}>
+          <Loader2 className="size-4 animate-spin" /> {t("common.loading")}
+        </div>
+      )}
+      {!isDataLoading && loadError && (
+        <div className={cn(T.bodySm, "flex items-center gap-2 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 px-4 py-3 rounded-xl border border-rose-100 dark:border-rose-800/50")}>
+          <AlertCircle className="size-4 shrink-0" /> {loadError}
+        </div>
+      )}
+
       {/* Summary Cards */}
       {isDataLoading ? (
         <StatsSkeleton />
@@ -277,7 +360,7 @@ export function InventarisPage() {
       <div className={cn(R.md, E.sm, "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col")}>
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/20 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
             <div className={cn(R.sm, "flex bg-slate-100/50 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700 overflow-x-auto no-scrollbar max-w-fit")}>
-                {["Semua", "Aman", "Menipis", "Kritis"].map((tab) => (
+                {INVENTORY_STATUS_TABS.map((tab) => (
                   <button 
                     key={tab}
                     onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
@@ -286,7 +369,7 @@ export function InventarisPage() {
                       activeTab === tab ? "bg-white dark:bg-slate-700 text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
                     )}
                   >
-                    {tab === "Semua" ? t("app.all") : getTranslatedStatus(tab)}
+                    {tab === INVENTORY_STOCK_STATUS.all ? t("app.all") : getTranslatedStatus(tab)}
                   </button>
                 ))}
             </div>
@@ -311,7 +394,7 @@ export function InventarisPage() {
             <ResponsiveTable
               label={t("inv.header")}
               scrollerClassName="rounded-none border-0 bg-transparent"
-              minWidthClassName="min-w-[760px]"
+              minWidthClassName={TABLE.minWidth.inventory}
             >
               <table className={TABLE.base} aria-label={t("inv.header")}>
                 <thead className={TABLE.head}>
@@ -326,7 +409,7 @@ export function InventarisPage() {
                         className={cn(
                           TABLE.headCell,
                           TABLE.headCellSortable,
-                          index === 0 && "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50"
+                          index === 0 && cn(TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")
                         )}
                       >
                         <button
@@ -350,7 +433,7 @@ export function InventarisPage() {
                       const daysLeft = getDaysLeft(p);
                       return (
                         <tr key={p.id} className={cn(TABLE.row, TABLE.rowHover, "group")}>
-                          <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+                          <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
                             <div className="flex flex-col">
                               <span className={cn(T.bodySm, "font-bold text-slate-900 dark:text-slate-200 leading-tight")}>{p.name}</span>
                               <span className={cn(T.caption, "text-slate-500")}>{p.sku} • {p.category}</span>
@@ -363,8 +446,8 @@ export function InventarisPage() {
                                 <div
                                   className={cn(
                                     "h-full rounded-full",
-                                    status === "Kritis" ? "bg-rose-500" :
-                                    status === "Menipis" ? "bg-amber-500" : "bg-emerald-500"
+                                    status === INVENTORY_STOCK_STATUS.critical ? "bg-rose-500" :
+                                    status === INVENTORY_STOCK_STATUS.thin ? "bg-amber-500" : "bg-emerald-500"
                                   )}
                                   style={{ width: `${Math.min((p.stock / (p.avgDailyDemand * 10)) * 100, 100)}%` }}
                                 />
@@ -375,8 +458,8 @@ export function InventarisPage() {
                             <div className="flex items-center gap-2">
                               <div className={cn(
                                 R.sm, T.dataSm, "size-7 flex items-center justify-center font-semibold",
-                                status === "Kritis" ? cn(C.destructive.bg, C.destructive.text) :
-                                status === "Menipis" ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                                status === INVENTORY_STOCK_STATUS.critical ? cn(C.destructive.bg, C.destructive.text) :
+                                status === INVENTORY_STOCK_STATUS.thin ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
                               )}>
                                 {daysLeft}
                               </div>
@@ -386,8 +469,8 @@ export function InventarisPage() {
                           <td className={TABLE.cell}>
                             <span className={cn(
                               T.micro, R.xs, "px-2 py-0.5 border",
-                              status === "Kritis" ? cn(C.destructive.bg, C.destructive.text, C.destructive.border) :
-                              status === "Menipis" ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/50" :
+                              status === INVENTORY_STOCK_STATUS.critical ? cn(C.destructive.bg, C.destructive.text, C.destructive.border) :
+                              status === INVENTORY_STOCK_STATUS.thin ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/50" :
                               "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50"
                             )}>
                               {getTranslatedStatus(status)}
@@ -412,7 +495,7 @@ export function InventarisPage() {
                         <EmptyState
                           title={t("app.empty_products")}
                           description={t("app.empty_desc")}
-                          action={<button type="button" onClick={() => { setSearchQuery(""); setActiveTab("Semua"); }} className={cn(T.buttonSm, C.primary.icon, "underline cursor-pointer", A11Y.focusRing.default)}>{t("app.reset")}</button>}
+                          action={<button type="button" onClick={() => { setSearchQuery(""); setActiveTab(INVENTORY_STOCK_STATUS.all); }} className={cn(T.buttonSm, C.primary.icon, "underline cursor-pointer", A11Y.focusRing.default)}>{t("app.reset")}</button>}
                         />
                       </td>
                     </tr>
@@ -561,12 +644,24 @@ export function InventarisPage() {
             category: editingProduct.category,
             price: editingProduct.price,
             stock: editingProduct.stock,
-            unit: "pcs",
+            unit: INVENTORY_UNITS[0],
             minThreshold: editingProduct.minStock,
             description: "",
           } : undefined}
           onClose={() => setProductFormOpen(false)}
-          onSubmit={(data) => { void data; setProductFormOpen(false); toast.success(productFormMode === "add" ? t("inv.toast.added") : t("inv.toast.updated")); }}
+          onSubmit={async (data: ProductFormData) => {
+          if (isDemoDataEnabled()) { setProductFormOpen(false); toast.success(productFormMode === "add" ? t("inv.toast.added") : t("inv.toast.updated")); return; }
+          if (productFormMode === "add") {
+            await invClient.createProduct({ sku: data.sku, name: data.name, family: data.family, category: data.category, unit: data.unit, base_price: data.price, cost_price: data.price * 0.8, supplier: data.supplier || undefined });
+            toast.success(t("inv.toast.added"));
+          } else if (editingProduct) {
+            await invClient.updateProduct(editingProduct.id, { name: data.name, category: data.category, unit: data.unit, base_price: data.price, supplier: data.supplier || undefined });
+            toast.success(t("inv.toast.updated"));
+          }
+          const storeNbr = currentUser?.storeNbr ?? undefined;
+          invClient.fetchInventoryStock({ store_nbr: storeNbr, limit: 500 }).then(items => setApiProducts(items.map(mapBackendInventory)));
+          setProductFormOpen(false);
+        }}
         />
       )}
 
@@ -578,10 +673,26 @@ export function InventarisPage() {
             name: stockUpdateProduct.name,
             sku: stockUpdateProduct.sku,
             currentStock: stockUpdateProduct.stock,
-            unit: "pcs",
+            unit: INVENTORY_UNITS[0],
           }}
           onClose={() => setStockUpdateProduct(null)}
-          onSubmit={(data) => { void data; setStockUpdateProduct(null); toast.success(t("inv.toast.stock_updated")); }}
+          onSubmit={async (data) => {
+            if (!isDemoDataEnabled() && stockUpdateProduct?.inventory_id) {
+              const typeMap: Record<string, "IN" | "OUT" | "ADJUSTMENT"> = { in: "IN", out: "OUT", adjustment: "ADJUSTMENT" };
+              const movType = typeMap[data.type] ?? "ADJUSTMENT";
+              await invClient.recordStockMovement({
+                inventory_id: stockUpdateProduct.inventory_id,
+                movement_type: movType,
+                quantity: Math.abs(data.quantity),
+                reason: data.reason || t("inv.toast.stock_updated"),
+                performed_by: currentUser?.id,
+              });
+              invClient.fetchInventoryStock({ store_nbr: currentUser?.storeNbr ?? undefined, limit: 500 })
+                .then(items => setApiProducts(items.map(mapBackendInventory)));
+            }
+            setStockUpdateProduct(null);
+            toast.success(t("inv.toast.stock_updated"));
+          }}
         />
       )}
 
@@ -593,7 +704,7 @@ export function InventarisPage() {
       {/* Stock Opname Modal */}
       {opnameOpen && (
         <StockOpnameModal
-          products={MOCK_PRODUCTS.map(p => ({
+          products={allProducts.map(p => ({
             id: p.id,
             sku: p.sku,
             name: p.name,
@@ -608,7 +719,7 @@ export function InventarisPage() {
       {/* Stock Transfer Modal */}
       {transferOpen && (
         <StockTransferModal
-          products={MOCK_PRODUCTS.map(p => ({
+          products={allProducts.map(p => ({
             id: p.id,
             sku: p.sku,
             name: p.name,
@@ -625,8 +736,10 @@ export function InventarisPage() {
         onImport={(rows: ImportProductRow[]) => {
           const newProducts: Product[] = rows.map((row, i) => ({
             id: `imp-${Date.now()}-${i}`,
+            inventory_id: null,
             sku: row.sku,
             name: row.name,
+            family: "",
             category: row.category,
             location: "—",
             stock: row.stock,
@@ -637,6 +750,7 @@ export function InventarisPage() {
             lastRestock: new Date().toISOString().split("T")[0],
             price: row.price,
             avgDailyDemand: Math.max(1, Math.floor(row.stock / 15)),
+            daysRemaining: Math.floor(row.stock / Math.max(1, Math.floor(row.stock / 15))),
             trend: [row.stock, row.stock, row.stock, row.stock, row.stock, row.stock, row.stock],
           }));
           setImportedProducts(prev => [...prev, ...newProducts]);

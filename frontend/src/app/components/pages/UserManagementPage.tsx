@@ -44,9 +44,11 @@ import { BTN } from "@/app/lib/buttons";
 import { EmptyState } from "@/app/components/ui/EmptyState";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
+import { isDemoDataEnabled } from "@/app/lib/demo-mode";
+import { USER_ROLE_VALUES, type UserRole as DomainUserRole } from "@/app/domain/constants";
 
 /* ── Types & Mock Data (unchanged logic) ──────────────────────────── */
-type UserRole = "admin" | "owner" | "cashier" | "inventory_manager";
+type UserRole = DomainUserRole;
 
 interface User {
   id: string;
@@ -68,74 +70,6 @@ function createLocalUserId() {
   return `u-local-${localUserSequence}`;
 }
 
-const MOCK_USERS: User[] = [
-  {
-    id: "usr-1",
-    name: "Ahmad Faiz",
-    email: "faiz@insightsphere.id",
-    phone: "081234567890",
-    role: "admin",
-    store: "Toko Pusat - Jakarta",
-    branch: "Cabang Jakarta Selatan",
-    status: "active",
-    lastActive: new Date(2024, 2, 15, 9, 30),
-  },
-  {
-    id: "usr-2",
-    name: "Rini Susanti",
-    email: "rini@insightsphere.id",
-    phone: "082345678901",
-    role: "cashier",
-    store: "Toko Pusat - Jakarta",
-    branch: "Cabang Jakarta Selatan",
-    status: "active",
-    lastActive: new Date(2024, 2, 15, 8, 45),
-  },
-  {
-    id: "usr-3",
-    name: "Budi Hartono",
-    email: "budi@insightsphere.id",
-    phone: "083456789012",
-    role: "inventory_manager",
-    store: "Toko Pusat - Jakarta",
-    branch: "Cabang Jakarta Utara",
-    status: "active",
-    lastActive: new Date(2024, 2, 14, 16, 20),
-  },
-  {
-    id: "usr-4",
-    name: "Siti Aminah",
-    email: "siti@insightsphere.id",
-    phone: "084567890123",
-    role: "cashier",
-    store: "Toko Cabang - Bandung",
-    branch: "Cabung Bandung",
-    status: "inactive",
-    lastActive: new Date(2024, 2, 10, 11, 0),
-  },
-  {
-    id: "usr-5",
-    name: "Dewi Kusuma",
-    email: "dewi@insightsphere.id",
-    phone: "085678901234",
-    role: "admin",
-    store: "Toko Cabang - Bandung",
-    branch: "Cabung Bandung",
-    status: "active",
-    lastActive: new Date(2024, 2, 15, 7, 15),
-  },
-  {
-    id: "usr-6",
-    name: "Eko Prasetyo",
-    email: "eko@insightsphere.id",
-    phone: "086789012345",
-    role: "owner",
-    store: "Toko Pusat - Jakarta",
-    branch: "Kantor Pusat",
-    status: "active",
-    lastActive: new Date(2024, 2, 15, 10, 0),
-  },
-];
 
 /* ── Token helpers: role colour mapping (replaces ROLE_CONFIG) ───── */
 const ROLE_BADGE: Record<UserRole, string> = {
@@ -185,7 +119,7 @@ const UserTableRow = memo(function UserTableRow({
     <tr
       className={cn(TABLE.row, TABLE.rowHover, "group")}
     >
-      <td className={cn(TABLE.cell, "sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
+      <td className={cn(TABLE.cell, TABLE.stickyColumn, "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50")}>
         <div className="flex items-center gap-3">
           {user.avatar ? (
             <img src={user.avatar} alt={user.name} className={cn(ICON["3xl"], R.full, "object-cover")} />
@@ -284,7 +218,7 @@ const userSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
   email: z.string().min(1, "Email wajib diisi").email("Format email tidak valid"),
   phone: z.string().min(1, "No. telepon wajib diisi"),
-  role: z.enum(["owner", "admin", "inventory_manager", "cashier"]),
+  role: z.enum(USER_ROLE_VALUES),
   store: z.string().min(1, "Toko wajib diisi"),
   branch: z.string().optional(),
   status: z.enum(["active", "inactive"]),
@@ -300,7 +234,16 @@ export default function UserManagementPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [sortField, setSortField] = useState<keyof User | "">("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  /* ---- Demo mode: lazy-load mock users only when explicitly enabled ---- */
+  useEffect(() => {
+    if (!isDemoDataEnabled()) return;
+    let cancelled = false;
+    void import("@/app/demo/users").then(({ DEMO_USERS }) => {
+      if (!cancelled) setUsers(DEMO_USERS as unknown as User[]);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -698,12 +641,12 @@ export default function UserManagementPage() {
         <ResponsiveTable
           label={t("um.header")}
           scrollerClassName="rounded-none border-0 bg-transparent"
-          minWidthClassName="min-w-[1060px]"
+          minWidthClassName={TABLE.minWidth.userManagement}
         >
           <table className={TABLE.base} aria-label={t("um.header")}>
             <thead className={TABLE.head}>
               <tr>
-                <th className={cn(TABLE.headCell, TABLE.headCellSortable, "sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50")}>
+                <th className={cn(TABLE.headCell, TABLE.headCellSortable, TABLE.stickyColumn, "bg-slate-50 dark:bg-slate-800/50")}>
                   <button
                     type="button"
                     onClick={() => toggleSort("name")}
@@ -839,7 +782,7 @@ export default function UserManagementPage() {
               "bg-white dark:bg-slate-800",
               R_COMPONENT.modal,
               E_COMPONENT.modal,
-              "w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col",
+              "w-full max-w-2xl overflow-hidden flex flex-col", MODAL.maxHeight.lg,
               Z.modal,
               "animate-in zoom-in-95 duration-150"
             )}
