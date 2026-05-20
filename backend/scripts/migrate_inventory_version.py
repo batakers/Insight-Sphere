@@ -2,14 +2,21 @@
 Migration Script — Add 'version' column to inventory table.
 InsightSphere POS Hardening Phase.
 """
-from sqlalchemy import create_engine, text
 import os
+from typing import Optional
 
-# Database URL from environment or fallback to default
-DATABASE_URL = "postgresql://postgres:postgres@localhost/insightsphere"
+from sqlalchemy import create_engine, text
 
-def migrate():
-    engine = create_engine(DATABASE_URL)
+
+def get_database_url() -> str:
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required to run inventory version migration")
+    return database_url
+
+
+def migrate(database_url: Optional[str] = None):
+    engine = create_engine(database_url or get_database_url())
     
     with engine.connect() as conn:
         print("Checking inventory table for version column...")
