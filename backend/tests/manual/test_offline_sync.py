@@ -10,9 +10,15 @@ import requests
 import uuid
 import json
 import time
+import os
 from datetime import datetime, timezone
+import pytest
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("OFFLINE_SYNC_BASE_URL", "http://localhost:8000")
+pytestmark = pytest.mark.skipif(
+    "OFFLINE_SYNC_BASE_URL" not in os.environ,
+    reason="manual offline sync tests require OFFLINE_SYNC_BASE_URL",
+)
 
 
 def header(txt):

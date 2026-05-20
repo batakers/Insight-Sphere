@@ -33,7 +33,7 @@ def test_trigger_and_list_notifications(admin_client):
 
 def test_trigger_notification_forbidden_for_regular_user(regular_client):
     payload = {
-        "recipient_id": uuid.uuid4(),
+        "recipient_id": str(uuid.uuid4()),
         "title": "Hack Attempt",
         "message": "Testing",
         "category": "SYSTEM",

@@ -11,11 +11,21 @@ def test_list_templates_authorized(admin_client):
     assert isinstance(data, list)
     assert any("export_type" in t for t in data)
 
+
+def test_reporting_dashboard_stats_authorized(admin_client):
+    response = admin_client.get("/reporting/dashboard-stats?period=month")
+    assert response.status_code == 200
+    data = response.json()
+    assert "revenue" in data
+    assert "transactions" in data
+    assert "inventory_value" in data
+
+
 def test_export_report_and_history(admin_client):
     # Corrected export_type based on enum
     payload = {
         "export_type": "SALES",
-        "period": "MONTH", # Assuming MONTH is a valid period
+        "period": "month",
         "export_format": "CSV",
         "store_nbr": None
     }
@@ -33,7 +43,7 @@ def test_export_report_and_history(admin_client):
 def test_export_unauthorized(client):
     payload = {
         "export_type": "PROFIT_LOSS",
-        "period": "MONTH",
+        "period": "month",
         "export_format": "CSV",
     }
     response = client.post("/reporting/export", json=payload)
