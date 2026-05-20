@@ -59,3 +59,17 @@ tmp_*.js
 .DS_Store
 Thumbs.db
 *.pem
+# Pytest temp dirs (sandbox/agent runs) — sering tersisa locked dari tmp_path
+pytest-cache-files-*/
+
+# Root npm lockfile stub (workspace lock ada di frontend/package-lock.json)
+/package-lock.json
+
+# Frontend test artifacts (Playwright + node:test scratch)
+frontend/test-output.txt
+frontend/test-results/
+frontend/playwright-report/
+
+# Agentic run logs
+.run-logs/
+frontend/.run-logs/
