@@ -1,5 +1,23 @@
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, toQuery } from "../lib/api";
 import { StoreTransactionCreate, TransactionCreate, TransactionResponse } from "../types/pos";
+
+export interface TransactionSummaryResponse {
+  total_revenue: number;
+  total_transactions: number;
+  total_items: number;
+  payment_methods: Array<{ method: string; count: number; total: number }>;
+  series: Array<{ date: string; revenue: number; transactions: number }>;
+}
+
+export const fetchTransactionSummary = (params: {
+  date_from: string;
+  date_to: string;
+  store_nbr?: number;
+  group_by?: "day" | "week" | "month";
+}): Promise<TransactionSummaryResponse> =>
+  api<TransactionSummaryResponse>("/transactions/summary", {
+    query: toQuery(params),
+  });
 
 /**
  * Transaction Service — Menangani pengiriman data transaksi Kasir ke Backend.
@@ -39,5 +57,36 @@ export const transactionService = {
       method: "POST",
       body: { transactions },
     });
-  }
+  },
+
+  /**
+   * Mengambil semua transaksi (admin / owner).
+   * GET /transactions/?skip=&limit=&date_from=&date_to=&cashier_id=
+   */
+  async fetchTransactions(params?: {
+    skip?: number;
+    limit?: number;
+    date_from?: string;
+    date_to?: string;
+    cashier_id?: string;
+  }): Promise<TransactionResponse[]> {
+    return await api<TransactionResponse[]>("/transactions/", {
+      query: toQuery(params ?? {}),
+    });
+  },
+
+  /**
+   * Mengambil transaksi milik kasir yang sedang login.
+   * GET /transactions/mine?skip=&limit=&date_from=&date_to=
+   */
+  async fetchMyTransactions(params?: {
+    skip?: number;
+    limit?: number;
+    date_from?: string;
+    date_to?: string;
+  }): Promise<TransactionResponse[]> {
+    return await api<TransactionResponse[]>("/transactions/mine", {
+      query: toQuery(params ?? {}),
+    });
+  },
 };

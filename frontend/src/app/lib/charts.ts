@@ -220,6 +220,8 @@ export const CHART_HEIGHT = {
   sm: 200,
   /** Dashboard card standard. */
   md: 280,
+  /** Mid-large chart (between md and lg) — laporan analytics blok 320px. */
+  mlg: 320,
   /** Dedicated chart section. */
   lg: 360,
   /** Full-page hero chart. */
@@ -257,6 +259,10 @@ export function getChartColors(theme: "light" | "dark" | undefined) {
     tooltipBorder: isDark
       ? CHART_COLORS.tooltip.borderDark
       : CHART_COLORS.tooltip.border,
+    tooltipForeground: isDark ? CHART_COLORS.tooltip.foregroundDark : "#0f172a",
+    tooltipShadow: isDark
+      ? CHART_COLORS.tooltip.shadowDark
+      : CHART_COLORS.tooltip.shadow,
     /** Primary unchanged in dark mode (brand consistency). */
     primary: CHART_COLORS.primary.base,
     /** Series palette. */
@@ -291,6 +297,18 @@ export function getGridProps(theme: "light" | "dark" | undefined) {
     stroke: colors.grid,
     strokeDasharray: "3 3",
     vertical: false,
+  };
+}
+
+export function getTooltipContentStyle(theme: "light" | "dark" | undefined) {
+  const colors = getChartColors(theme);
+  return {
+    borderRadius: "0.75rem",
+    border: `1px solid ${colors.tooltipBorder}`,
+    background: colors.tooltipBg,
+    color: colors.tooltipForeground,
+    boxShadow: colors.tooltipShadow,
+    fontSize: "10px",
   };
 }
 

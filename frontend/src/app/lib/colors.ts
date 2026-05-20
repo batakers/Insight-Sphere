@@ -93,7 +93,7 @@ export const C = {
   },
 
   /* ---------- DESTRUCTIVE (rose) ----------
-   * Use for: errors, delete actions, decline, admin role badge.
+   * Use for: errors, delete actions, critical alerts, decline.
    */
   destructive: {
     bg: "bg-rose-50 dark:bg-rose-900/30",
@@ -162,7 +162,7 @@ export const C = {
 
   /* -----------------------------------------------------------------------
    * Role tokens — formal color mapping for the 4 user roles.
-   * Palette enforces: owner=indigo, admin=rose, cashier=emerald, inv_mgr=teal.
+   * Palette enforces: owner=indigo, admin=slate, cashier=emerald, inv_mgr=teal.
    * `teal` is the 5th color allowed ONLY for inventory_manager role badges.
    * ---------------------------------------------------------------------*/
 
@@ -173,11 +173,11 @@ export const C = {
     solid: "bg-indigo-600 hover:bg-indigo-700",
   },
 
-  /** Role: Admin — rose. */
+  /** Role: Admin — slate (charcoal). Authority & professionalism, distinct from destructive/error rose. */
   roleAdmin: {
-    avatar: "bg-rose-600 border-rose-500 text-white",
-    badge: "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/50",
-    solid: "bg-rose-600 hover:bg-rose-700",
+    avatar: "bg-slate-700 border-slate-600 text-white",
+    badge: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+    solid: "bg-slate-700 hover:bg-slate-800",
   },
 
   /** Role: Cashier — emerald. */
@@ -224,7 +224,7 @@ export const ALLOWED_COLOR_FAMILIES = [
   "indigo",  // primary CTA + owner role
   "emerald", // success + cashier role
   "amber",   // warning
-  "rose",    // destructive + admin role
+  "rose",    // destructive (errors, delete, critical alerts)
   "blue",    // info (extended)
   "violet",  // ai/predictive (extended)
   "teal",    // inventory_manager role (extended)

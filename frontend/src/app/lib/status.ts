@@ -401,7 +401,7 @@ export type PriorityCode = keyof typeof PRIORITY;
  * Display uses ID labels per TERMINOLOGY.md §2.
  * Colors aligned dengan colors.ts (canonical):
  *   owner   → indigo
- *   admin   → rose
+ *   admin   → slate
  *   inventory_manager → teal
  *   cashier → emerald
  * -----------------------------------------------------------------------*/
@@ -420,8 +420,8 @@ export const ROLE = {
     labelId: "Admin",
     labelEn: "Admin",
     labelCompact: "Admin",
-    badgeVariant: "destructive",
-    colorFamily: "rose",
+    badgeVariant: "neutral",
+    colorFamily: "slate",
   },
   inventory_manager: {
     code: "inventory_manager",

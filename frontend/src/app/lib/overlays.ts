@@ -143,6 +143,32 @@ export const DROPDOWN = {
     "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 " +
     "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
 
+  /** Reusable anchored panel sizes. */
+  size: {
+    headerStore: "w-72",
+    notificationPanel:
+      "fixed left-4 right-4 top-16 max-h-[calc(100dvh-5rem)] " +
+      "sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-4 " +
+      "sm:w-[440px] sm:max-h-[700px]",
+  },
+
+  /** Trigger text constraints for dropdown anchors. */
+  triggerText: {
+    headerStore: "hidden max-w-[100px] truncate md:inline lg:max-w-[140px]",
+  },
+
+  /** Notification dropdown badge dimensions. */
+  notificationBadge: {
+    count:
+      "absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 " +
+      "flex items-center justify-center rounded-full border-2 border-white " +
+      "text-white leading-none",
+    overflow:
+      "absolute -top-1 -right-1 w-[18px] h-[18px] " +
+      "flex items-center justify-center rounded-full border-2 border-white " +
+      "font-bold text-white leading-none",
+  },
+
   /** Menu item. */
   item: {
     /** Base layout for any item. */

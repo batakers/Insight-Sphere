@@ -135,6 +135,25 @@ export const MODAL = {
     full: "w-full max-w-[95vw]",
   },
 
+  /**
+   * Container max-height tiers untuk modal yang mengandung body scrollable.
+   * Pakai bersama MODAL.container lalu tambahkan kelas \lex flex-col\
+   * agar header/body/footer ikut konvensi shrink/grow.
+   */
+  maxHeight: {
+    /** Multi-field form (default scrollable). */
+    md: "max-h-[85vh]",
+    /** Form panjang / data table dalam modal. */
+    lg: "max-h-[90vh]",
+  },
+
+  /**
+   * Numeric counter chip yang muncul di samping tombol +/- (misal RefundModal).
+   * Pisahkan dari typography agar lebar dan alignment-nya konsisten lintas modal.
+   */
+  counterValue:
+    "min-w-[16px] text-center",
+
   /** Wrapper to center the modal in viewport. */
   wrapper:
     "flex items-center justify-center min-h-screen p-4",

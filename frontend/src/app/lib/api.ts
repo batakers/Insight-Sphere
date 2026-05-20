@@ -45,6 +45,8 @@ interface PydanticErrorItem {
 interface BackendErrorBody {
   detail?: string | PydanticErrorItem[];
   traceback?: string;
+  code?: string;
+  target_role?: string;
 }
 
 /**
@@ -100,6 +102,7 @@ function normalizeErrorMessage(body: BackendErrorBody | undefined, fallback: str
 export const API_EVENTS = {
   UNAUTHORIZED: "auth:unauthorized",
   FORBIDDEN: "auth:forbidden",
+  MIRROR_READ_ONLY: "auth:mirror_read_only",
 } as const;
 
 function emitApiEvent(name: string, detail?: unknown) {
@@ -132,6 +135,13 @@ export const api = ofetch.create({
     if (response.status === 401) {
       emitApiEvent(API_EVENTS.UNAUTHORIZED, { path: response.url });
     } else if (response.status === 403) {
+      if (body?.code === "MIRROR_READ_ONLY") {
+        emitApiEvent(API_EVENTS.MIRROR_READ_ONLY, {
+          path: response.url,
+          target_role: body.target_role,
+          message,
+        });
+      }
       emitApiEvent(API_EVENTS.FORBIDDEN, { path: response.url });
     }
 

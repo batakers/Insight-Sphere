@@ -172,6 +172,21 @@ export const LAYOUT_TEMPLATE = {
 } as const;
 
 /* -------------------------------------------------------------------------
+ * DECORATIVE LAYOUT TOKENS
+ * -----------------------------------------------------------------------*/
+
+export const LAYOUT_DECORATION = {
+  portalOrnament: {
+    primary:
+      "absolute top-0 right-0 w-[500px] h-[500px] " +
+      "bg-indigo-50 rounded-full blur-[120px] opacity-50 -mr-48 -mt-48",
+    secondary:
+      "absolute bottom-0 left-0 w-[400px] h-[400px] " +
+      "bg-slate-100 rounded-full blur-[100px] opacity-60 -ml-32 -mb-32",
+  },
+} as const;
+
+/* -------------------------------------------------------------------------
  * Type exports
  * -----------------------------------------------------------------------*/
 export type LayoutClass = keyof typeof LAYOUT_CLASS;

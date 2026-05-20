@@ -1,3 +1,5 @@
+import { Z } from "@/app/lib/elevation";
+
 /**
  * InsightSphere Data Display Tokens
  * ===================================
@@ -78,7 +80,28 @@ export const TABLE = {
     "hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
 
   /** Sticky header (for long tables). */
-  stickyHead: "sticky top-0 z-10",
+  stickyHead: `sticky top-0 ${Z.raised}`,
+
+  /** Sticky first column for horizontally scrollable tables. */
+  stickyColumn: `sticky left-0 ${Z.raised}`,
+
+  /** Responsive table min-width presets. */
+  minWidth: {
+    default: "min-w-[720px]",
+    detailCompact: "min-w-[480px] sm:min-w-full",
+    reportCompact: "min-w-[560px]",
+    topProducts: "min-w-[620px]",
+    inventory: "min-w-[760px]",
+    settings: "min-w-[760px]",
+    dashboard: "min-w-[820px]",
+    forecast: "min-w-[860px]",
+    stockHistory: "min-w-[860px]",
+    transaction: "min-w-[940px]",
+    prediction: "min-w-[980px]",
+    stockMovement: "min-w-[1040px]",
+    userManagement: "min-w-[1060px]",
+    cashManagement: "min-w-[1280px]",
+  },
 
   /** tbody: horizontal dividers between rows. */
   body: "divide-y divide-slate-100 dark:divide-slate-800",
@@ -188,7 +211,7 @@ export const BADGE = {
   /**
    * Role badges (canonical mapping dengan colors.ts).
    *   - owner   → indigo
-   *   - admin   → rose
+   *   - admin   → slate
    *   - inventory_manager → teal
    *   - cashier → emerald (NOT slate — aligned with colors.ts §roleCashier)
    */
@@ -199,9 +222,9 @@ export const BADGE = {
       "border-indigo-100 dark:border-indigo-800/50",
 
     admin:
-      "bg-rose-50 dark:bg-rose-900/30 " +
-      "text-rose-700 dark:text-rose-400 " +
-      "border-rose-100 dark:border-rose-800/50",
+      "bg-slate-100 dark:bg-slate-800 " +
+      "text-slate-700 dark:text-slate-300 " +
+      "border-slate-200 dark:border-slate-700",
 
     inventory:
       "bg-teal-50 dark:bg-teal-900/30 " +
@@ -243,8 +266,8 @@ export const AVATAR = {
       "text-indigo-700 dark:text-indigo-300",
 
     admin:
-      "bg-rose-100 dark:bg-rose-900/40 " +
-      "text-rose-700 dark:text-rose-300",
+      "bg-slate-200 dark:bg-slate-700 " +
+      "text-slate-700 dark:text-slate-200",
 
     inventory:
       "bg-teal-100 dark:bg-teal-900/40 " +
