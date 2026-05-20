@@ -5,7 +5,7 @@
  * Return user profile atau 401 kalau cookie invalid.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthCookie, getBackendUrl, clearAuthCookie } from "@/app/lib/auth-cookie";
 
 export async function GET() {
@@ -47,4 +47,41 @@ export async function GET() {
 
   const user = await backendResponse.json();
   return NextResponse.json(user, { status: 200 });
+}
+
+export async function PATCH(request: NextRequest) {
+  const token = await getAuthCookie();
+  if (!token) {
+    return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ detail: "Invalid JSON body" }, { status: 400 });
+  }
+
+  let backendResponse: Response;
+  try {
+    backendResponse = await fetch(`${getBackendUrl()}/auth/me`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch (err) {
+    console.error("[/api/auth/me PATCH] Backend unreachable:", err);
+    return NextResponse.json(
+      { detail: "Tidak dapat menghubungi server" },
+      { status: 503 }
+    );
+  }
+
+  const data = await backendResponse.json().catch(() => ({}));
+  return NextResponse.json(data, { status: backendResponse.status });
 }
