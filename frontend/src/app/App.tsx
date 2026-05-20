@@ -28,11 +28,12 @@ export function App({ children }: AppProps) {
   // Dibuat per-instance App (bukan module-level) supaya SSR aman dari
   // state bleed antar request.
   const [queryClient] = useState(() => createQueryClient());
+  const showQueryDevtools = process.env.NEXT_PUBLIC_ENABLE_QUERY_DEVTOOLS === "true";
 
   return (
     <QueryClientProvider client={queryClient}>
       <AppContent>{children}</AppContent>
-      {process.env.NODE_ENV === "development" && (
+      {process.env.NODE_ENV === "development" && showQueryDevtools && (
         <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
       )}
     </QueryClientProvider>

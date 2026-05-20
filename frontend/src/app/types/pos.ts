@@ -71,7 +71,14 @@ export interface TransactionItemCreate {
 
 export interface TransactionResponse {
   id: string;
+  branch_id?: string | null;
+  date?: string | null;        // "YYYY-MM-DD"
+  time?: string | null;        // "HH:mm:ss"
   total_amount: number;
+  payment_method?: string | null;
+  cashier_id?: string | null;
+  cash_session_id?: string | null;
+  client_txn_id?: string | null;
   _mock?: boolean;
 }
 
