@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useTranslation } from "@/app/i18n";
 import { T } from "@/app/lib/typography";
 import { cn } from "@/app/lib/utils";
+import { isLoginPath, isPublicPath } from "@/app/lib/route-policy";
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, role, isLoading } = useAuth();
@@ -18,14 +19,14 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    // 1. If not logged in and not on login page, redirect to staff login (User choice #1)
-    if (!user && !pathname.includes("/login")) {
+    // 1. If not logged in and not on a public route, redirect to staff login (User choice #1)
+    if (!user && !isPublicPath(pathname)) {
       router.push("/login/cashier");
       return;
     }
 
     // 2. If logged in but trying to access login page, redirect to home
-    if (user && pathname.includes("/login")) {
+    if (user && isLoginPath(pathname)) {
       router.push("/");
       return;
     }

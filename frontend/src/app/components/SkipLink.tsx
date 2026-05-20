@@ -1,6 +1,7 @@
 "use client";
 
 import { A11Y } from "@/app/lib/a11y";
+import { useTranslation } from "@/app/i18n";
 
 /**
  * SkipLink — Keyboard accessibility skip-to-content link.
@@ -17,9 +18,11 @@ import { A11Y } from "@/app/lib/a11y";
  * <main id="main-content">...</main>
  */
 export function SkipLink() {
+  const { t } = useTranslation();
+
   return (
     <a href="#main-content" className={A11Y.skipLink}>
-      Lompat ke konten utama
+      {t("common.skip_to_content")}
     </a>
   );
 }

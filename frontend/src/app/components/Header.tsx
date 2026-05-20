@@ -20,6 +20,11 @@ import { useAuth } from "@/app/context/AuthContext";
 import { cn } from "@/app/lib/utils";
 import { T } from "@/app/lib/typography";
 import { C } from "@/app/lib/colors";
+import { Z } from "@/app/lib/elevation";
+import { DROPDOWN } from "@/app/lib/overlays";
+import { ICON } from "@/app/lib/spacing";
+import { A11Y } from "@/app/lib/a11y";
+import { ROLE_CODES } from "@/app/domain/constants";
 
 export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
   const { lang, setLang, t } = useTranslation();
@@ -106,7 +111,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
 
   return (
     <>
-      <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-300 dark:border-slate-800 flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 shrink-0 sticky top-0 z-30 shadow-sm dark:shadow-slate-900">
+      <header data-mirroring={actualRole === ROLE_CODES.admin && role !== ROLE_CODES.admin ? role : undefined} className={cn("h-14 bg-white dark:bg-slate-900 border-b border-slate-300 dark:border-slate-800 flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 shrink-0 sticky top-0 shadow-sm dark:shadow-slate-900", Z.header)}>
         {/* Left side: Breadcrumb */}
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <button
@@ -114,7 +119,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
             aria-label={t("common.menu")}
             className="lg:hidden flex size-10 shrink-0 items-center justify-center -ml-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 transition-colors"
           >
-            <Menu className="w-5 h-5 text-slate-500" aria-hidden="true" />
+            <Menu className={cn(ICON.lg, "text-slate-500")} aria-hidden="true" />
           </button>
           
           <Breadcrumbs />
@@ -136,7 +141,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
               className="flex min-w-10 items-center justify-center gap-2 h-10 px-2 sm:px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500 transition-colors group"
             >
               <Store className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-emerald-500 transition-colors" />
-              <span className={cn(T.bodySm, "hidden max-w-[100px] truncate font-bold text-slate-700 dark:text-slate-200 md:inline lg:max-w-[140px]")}>
+              <span className={cn(T.bodySm, DROPDOWN.triggerText.headerStore, "font-bold text-slate-700 dark:text-slate-200")}>
                 {stores[selectedStoreIdx]}
               </span>
               <ChevronDown className={cn("w-4 h-4 text-slate-400 dark:text-slate-500 transition-transform duration-200", storeOpen && "rotate-180")} />
@@ -149,7 +154,7 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
                 aria-label={t("header.store.title")}
                 aria-activedescendant={`store-option-${activeStoreIdx}`}
                 tabIndex={-1}
-                className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 py-2 animate-in fade-in zoom-in-95 duration-200"
+                className={cn(DROPDOWN.size.headerStore, Z.dropdown, "absolute right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl py-2 animate-in fade-in zoom-in-95 duration-200")}
               >
                 <div className="px-4 py-2 mb-1">
                   <p className={cn(T.label, "text-slate-400")}>{t("header.store.title")}</p>
@@ -183,8 +188,8 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
           {/* Dark Mode Toggle */}
           <button
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            aria-label="Toggle dark mode"
-            className="flex items-center justify-center size-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 transition-colors cursor-pointer"
+            aria-label={t("common.toggle_dark_mode")}
+            className={cn(A11Y.tapTarget, "flex items-center justify-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 transition-colors cursor-pointer")}
           >
             {resolvedTheme === "dark"
               ? <Sun className="w-4 h-4 text-amber-400" />
@@ -194,22 +199,13 @@ export function Header({ onMenuToggle }: { onMenuToggle?: () => void }) {
           {/* Language Toggle */}
           <button
             onClick={() => setLang(lang === "ID" ? "EN" : "ID")}
-            aria-label={`${t("common.language")}: ${lang === "ID" ? "Indonesian" : "English"}`}
-            className="hidden sm:flex items-center gap-2 h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 transition-colors cursor-pointer"
+            aria-label={`${t("common.language")}: ${lang === "ID" ? t("common.indonesian") : t("common.english")}`}
+            className={cn(A11Y.tapTarget, "flex items-center justify-center gap-0 sm:gap-2 px-2 sm:px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 transition-colors cursor-pointer")}
           >
             <Globe className="w-4 h-4 text-slate-500 dark:text-slate-400" aria-hidden="true" />
-            <span className={cn("text-slate-700 dark:text-slate-200 tracking-widest leading-none", T.label)}>{lang}</span>
+            <span className={cn("hidden text-slate-700 dark:text-slate-200 tracking-widest leading-none sm:inline", T.label)}>{lang}</span>
           </button>
 
-          {/* Mirror Mode Indicator */}
-          {actualRole === "admin" && role !== "admin" && (
-            <div className="hidden lg:flex items-center gap-2 px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 rounded-xl animate-pulse">
-               <div className="w-2 h-2 rounded-full bg-emerald-500" />
-               <span className={cn(C.success.icon, T.caption)}>
-                  {t("header.mirror", { role: role.toUpperCase() })}
-               </span>
-            </div>
-          )}
 
           <NotificationCenter />
         </div>

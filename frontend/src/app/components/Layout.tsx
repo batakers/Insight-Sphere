@@ -4,13 +4,14 @@ import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { SkipLink } from "./SkipLink";
 import { Header } from "./Header";
+import { MirrorModeBanner } from "./MirrorModeBanner";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RouteGuard } from "./RouteGuard";
-import { useAuth } from "@/app/context/AuthContext";
 import { usePathname } from "next/navigation";
 import { cn } from "@/app/lib/utils";
 import { Z } from "@/app/lib/elevation";
 import { BACKDROP } from "@/app/lib/utility";
+import { getShellMode } from "@/app/lib/route-policy";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -18,16 +19,29 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user } = useAuth();
   const pathname = usePathname();
-  
-  const isLoginPage = pathname.includes("/login");
+  const shellMode = getShellMode(pathname);
 
-  // If on login page, render simplified layout
-  if (isLoginPage) {
+  if (shellMode === "public") {
     return (
       <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 font-sans antialiased text-slate-900 dark:text-slate-100">
         <RouteGuard>{children}</RouteGuard>
+      </div>
+    );
+  }
+
+  if (shellMode === "fullscreen") {
+    return (
+      <div className="flex h-screen h-[100dvh] w-full overflow-hidden bg-slate-50 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+        <SkipLink />
+        <RouteGuard>
+          <MirrorModeBanner />
+          <main id="main-content" className="h-full flex-1 overflow-hidden p-2 text-slate-900 dark:text-slate-100 sm:p-3 lg:p-4">
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </main>
+        </RouteGuard>
       </div>
     );
   }
@@ -55,6 +69,7 @@ export function Layout({ children }: LayoutProps) {
         )}
 
         <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+          <MirrorModeBanner />
           <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
           <main id="main-content" className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scroll-smooth scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 text-slate-900 dark:text-slate-100">
             <div className="mx-auto max-w-[1920px] w-full">

@@ -22,19 +22,26 @@ import React, {
   useCallback,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as authClient from "@/app/lib/auth-client";
 import type { BackendUser, BackendRole } from "@/app/lib/auth-client";
 import { ApiError, API_EVENTS } from "@/app/lib/api";
 import { useTranslation } from "@/app/i18n";
+import { shouldHandleUnauthorizedRedirect, shouldHydrateAuth } from "@/app/lib/route-policy";
+import {
+  DEFAULT_ROLE,
+  ROLE_CODES,
+  isRoleCode,
+  type UserRole,
+} from "@/app/domain/constants";
 
 // ============================================================
 // Types
 // ============================================================
 
-export type UserRole = "admin" | "owner" | "inventory_manager" | "cashier";
+export type { UserRole };
 
 export interface User {
   id: string;
@@ -42,6 +49,9 @@ export interface User {
   role: UserRole;
   username: string;
   storeNbr: number | null;
+  email: string | null;
+  phone: string | null;
+  position: string | null;
   avatar?: string;
   twoFactorEnabled: boolean;
 }
@@ -55,6 +65,7 @@ interface AuthContextType {
   user: User | null;
   role: UserRole;
   actualRole: UserRole | null;
+  mirrorSession: authClient.MirrorSession | null;
   login: (username: string, pin: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   switchView: (role: UserRole) => void;
@@ -68,13 +79,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // ============================================================
 
 function mapBackendRoleToFE(role: BackendRole): UserRole {
-  switch (role) {
-    case "admin":             return "admin";
-    case "owner":             return "owner";
-    case "inventory_manager": return "inventory_manager";
-    case "cashier":           return "cashier";
-    default:                  return "cashier";
-  }
+  return isRoleCode(role) ? role : DEFAULT_ROLE;
 }
 
 function mapBackendUserToFE(u: BackendUser): User {
@@ -84,6 +89,9 @@ function mapBackendUserToFE(u: BackendUser): User {
     role: mapBackendRoleToFE(u.role),
     username: u.username,
     storeNbr: u.store_nbr,
+    email: u.email,
+    phone: u.phone,
+    position: u.position,
     avatar: u.avatar_url || undefined,
     twoFactorEnabled: u.two_factor_enabled,
   };
@@ -95,16 +103,18 @@ function mapBackendUserToFE(u: BackendUser): User {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname() || "/";
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const [viewingAsRole, setViewingAsRole] = useState<UserRole | null>(null);
+  const shouldHydrateSession = shouldHydrateAuth(pathname);
 
   // Hydrate session from cookie on mount (dan di-share ke component lain
   // via useQuery cache). Retry skip kalau 401 — tidak auth = baris kosong,
   // user harus login dulu.
   const {
     data: backendUser,
-    isLoading,
+    isLoading: isAuthQueryLoading,
   } = useQuery<BackendUser | null, ApiError>({
     queryKey: ["auth", "me"],
     queryFn: async () => {
@@ -118,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
+    enabled: shouldHydrateSession,
     retry: (failureCount, error) => {
       if (error instanceof ApiError && error.status === 401) return false;
       return failureCount < 2;
@@ -127,6 +138,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const user = backendUser ? mapBackendUserToFE(backendUser) : null;
+  const isLoading = shouldHydrateSession ? isAuthQueryLoading : false;
+
+  const { data: mirrorSession } = useQuery<authClient.MirrorSession | null, ApiError>({
+    queryKey: ["auth", "mirror"],
+    queryFn: async () => authClient.fetchMirrorSession(),
+    enabled: Boolean(user && user.role === ROLE_CODES.admin && shouldHydrateSession),
+    retry: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    if (!user || user.role !== ROLE_CODES.admin) {
+      setViewingAsRole(null);
+      return;
+    }
+    setViewingAsRole(mirrorSession?.target_role && isRoleCode(mirrorSession.target_role) ? mirrorSession.target_role : null);
+  }, [mirrorSession, user]);
 
   // Listen global 401 dari `api` client (data endpoint) → otomatis logout.
   useEffect(() => {
@@ -136,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setViewingAsRole(null);
       if (
         typeof window !== "undefined" &&
-        !window.location.pathname.startsWith("/login")
+        shouldHandleUnauthorizedRedirect(window.location.pathname)
       ) {
         toast.error(t("auth.session.expired"), {
           description: t("auth.session.expired_desc"),
@@ -145,8 +174,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     window.addEventListener(API_EVENTS.UNAUTHORIZED, handleUnauthorized);
+
+    const handleMirrorReadOnly = () => {
+      toast.error(t("mirror.read_only.toast"), {
+        description: t("mirror.read_only.desc"),
+      });
+    };
+    window.addEventListener(API_EVENTS.MIRROR_READ_ONLY, handleMirrorReadOnly);
+
     return () => {
       window.removeEventListener(API_EVENTS.UNAUTHORIZED, handleUnauthorized);
+      window.removeEventListener(API_EVENTS.MIRROR_READ_ONLY, handleMirrorReadOnly);
     };
   }, [queryClient, router, t]);
 
@@ -194,13 +232,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchView = useCallback(
     (newRole: UserRole) => {
-      // Impersonation hanya boleh untuk admin — FE-only concept, backend
-      // tidak aware. Diaudit di Phase 4.
-      if (user?.role === "admin" || user?.role === "owner") {
-        setViewingAsRole(newRole);
-      }
+      if (user?.role !== ROLE_CODES.admin) return;
+
+      const applyMirror = async () => {
+        try {
+          if (newRole === ROLE_CODES.admin) {
+            await authClient.stopMirrorSession();
+            setViewingAsRole(null);
+            queryClient.setQueryData(["auth", "mirror"], null);
+            return;
+          }
+          const session = await authClient.startMirrorSession(newRole);
+          setViewingAsRole(session.target_role);
+          queryClient.setQueryData(["auth", "mirror"], session);
+        } catch (err) {
+          const message = err instanceof ApiError ? err.message : t("common.error");
+          toast.error(message);
+        }
+      };
+
+      void applyMirror();
     },
-    [user]
+    [queryClient, t, user]
   );
 
   // ============================================================
@@ -208,12 +261,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ============================================================
 
   const effectiveRole: UserRole =
-    viewingAsRole || user?.role || "cashier";
+    viewingAsRole || user?.role || ROLE_CODES.cashier;
 
   const value: AuthContextType = {
     user,
     role: effectiveRole,
     actualRole: user?.role ?? null,
+    mirrorSession: mirrorSession ?? null,
     login,
     logout,
     switchView,
