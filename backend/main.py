@@ -24,7 +24,16 @@ is_vercel = os.getenv("VERCEL") == "1"
 handlers = [logging.StreamHandler()]
 if not is_vercel:
     try:
-        handlers.append(logging.FileHandler("system_api.log"))
+        # 5 MB rotation, 5 backup → ~25 MB ceiling untuk system_api.log* sebelum overwrite.
+        from logging.handlers import RotatingFileHandler
+        handlers.append(
+            RotatingFileHandler(
+                "system_api.log",
+                maxBytes=5 * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8",
+            )
+        )
     except Exception:
         pass
 
@@ -40,11 +49,17 @@ logger = logging.getLogger("SystemHealth")
 # Background Tasks (Celery & Worker)
 # ==========================================
 from domains.intelligence.tasks import ml_daily_batch_task
+from core.redis_health import should_skip_enqueue
 
 def trigger_ml_batch_task():
     """
     Trigger task ML di Celery Worker alih-alih di proses utama.
+
+    Dev guard: kalau Redis tidak reachable di non-production, skip enqueue
+    dan log warning sekali (warn-once) di `core.redis_health`.
     """
+    if should_skip_enqueue():
+        return
     try:
         # Mengirimkan pekerjaan ke Redis queue (Non-blocking)
         ml_daily_batch_task.delay()
@@ -89,12 +104,29 @@ async def lifespan(app: FastAPI):
         )
         logger.info("[Job Scheduler] PROD MODE: MLOps Analytics terjadwal secara kronologis setiap pukul 00:00 (Tengah Malam).")
         
+    # DB healthcheck setiap 60 detik — catat audit DB_HEALTH_FAIL kalau gagal.
+    from core.health_monitor import db_healthcheck_tick
+    scheduler.add_job(
+        db_healthcheck_tick,
+        'interval',
+        seconds=60,
+        next_run_time=None,
+        misfire_grace_time=30,
+        id='db_healthcheck',
+    )
+    logger.info("[Job Scheduler] DB healthcheck terjadwal tiap 60 detik.")
+
     scheduler.start()
     yield
     scheduler.shutdown()
     logger.info("[Job Scheduler] Saraf memori Cron dibersihkan secara elegan (Graceful Shutdown).")
 
 # 3. Inisialisasi Aplikasi Utama
+from core.mirror_middleware import MirrorReadOnlyMiddleware
+from core.rate_limit import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 app = FastAPI(
     title="InsightSphere API",
     description="ERP Backend berbasis Domain-Driven Design dengan XAI & MLOps Pipeline",
@@ -133,6 +165,11 @@ app.include_router(dataset_router)
 app.include_router(notification_router)
 app.include_router(reporting_router)
 app.include_router(dashboard_router)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(MirrorReadOnlyMiddleware)
 
 @app.get("/")
 def read_root():
