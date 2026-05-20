@@ -11,6 +11,7 @@ import { T } from "@/app/lib/typography";
 import { R } from "@/app/lib/radii";
 import { E } from "@/app/lib/elevation";
 import { useTranslation } from "@/app/i18n";
+import { LoginControls } from "@/app/components/LoginControls";
 
 type Step = "email" | "sent" | "reset" | "success";
 
@@ -73,6 +74,8 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
+      <LoginControls />
+
       <div className="w-full max-w-sm z-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
 
         {/* Brand badge */}
@@ -214,7 +217,7 @@ export default function ForgotPasswordPage() {
                         type="button"
                         onClick={field.toggle}
                         className="text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 cursor-pointer transition-colors"
-                        aria-label={field.show ? "Sembunyikan" : "Tampilkan"}
+                        aria-label={field.show ? t("auth.aria.hide_password") : t("auth.aria.show_password")}
                       >
                         {field.show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                       </button>
