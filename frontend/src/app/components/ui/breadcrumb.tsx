@@ -1,11 +1,22 @@
+"use client";
+
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
 
 import { cn } from "./utils";
+import { useTranslation } from "@/app/i18n";
+import { T } from "@/app/lib/typography";
+import { ICON } from "@/app/lib/spacing";
+import { A11Y } from "@/app/lib/a11y";
 
-function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
-  return <nav aria-label="breadcrumb" data-slot="breadcrumb" {...props} />;
+function Breadcrumb({
+  "aria-label": ariaLabel,
+  ...props
+}: React.ComponentProps<"nav">) {
+  const { t } = useTranslation();
+
+  return <nav aria-label={ariaLabel ?? t("common.breadcrumb")} data-slot="breadcrumb" {...props} />;
 }
 
 function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
@@ -13,7 +24,8 @@ function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
     <ol
       data-slot="breadcrumb-list"
       className={cn(
-        "text-muted-foreground flex flex-wrap items-center gap-1.5 text-sm break-words sm:gap-2.5",
+        "text-muted-foreground flex flex-wrap items-center gap-1.5 break-words sm:gap-2.5",
+        T.body,
         className,
       )}
       {...props}
@@ -72,10 +84,10 @@ function BreadcrumbSeparator({
       data-slot="breadcrumb-separator"
       role="presentation"
       aria-hidden="true"
-      className={cn("[&>svg]:size-3.5", className)}
+      className={className}
       {...props}
     >
-      {children ?? <ChevronRight />}
+      {children ?? <ChevronRight className={ICON.md} />}
     </li>
   );
 }
@@ -84,16 +96,18 @@ function BreadcrumbEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const { t } = useTranslation();
+
   return (
     <span
       data-slot="breadcrumb-ellipsis"
       role="presentation"
       aria-hidden="true"
-      className={cn("flex size-9 items-center justify-center", className)}
+      className={cn("flex items-center justify-center", A11Y.tapTarget, className)}
       {...props}
     >
-      <MoreHorizontal className="size-4" />
-      <span className="sr-only">More</span>
+      <MoreHorizontal className={ICON.md} />
+      <span className="sr-only">{t("common.more_pages")}</span>
     </span>
   );
 }

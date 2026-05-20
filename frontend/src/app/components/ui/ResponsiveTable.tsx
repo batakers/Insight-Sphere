@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { cn } from "@/app/lib/utils";
 import { TABLE } from "@/app/lib/data";
+import { Z } from "@/app/lib/elevation";
 
 interface ResponsiveTableProps {
   children: ReactNode;
@@ -15,7 +16,7 @@ export function ResponsiveTable({
   label,
   className,
   scrollerClassName,
-  minWidthClassName = "min-w-[720px]",
+  minWidthClassName = TABLE.minWidth.default,
 }: ResponsiveTableProps) {
   return (
     <div className={cn("relative", className)}>
@@ -27,7 +28,7 @@ export function ResponsiveTable({
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-white dark:from-slate-900 to-transparent md:hidden"
+          className={cn(Z.raised, "pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white dark:from-slate-900 to-transparent md:hidden")}
         />
         <div className={cn("w-full", minWidthClassName)}>{children}</div>
       </div>

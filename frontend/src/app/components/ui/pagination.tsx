@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import {
   ChevronLeftIcon,
@@ -7,12 +9,19 @@ import {
 
 import { cn } from "./utils";
 import { Button, buttonVariants } from "./button";
+import { useTranslation } from "@/app/i18n";
 
-function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
+function Pagination({
+  className,
+  "aria-label": ariaLabel,
+  ...props
+}: React.ComponentProps<"nav">) {
+  const { t } = useTranslation();
+
   return (
     <nav
       role="navigation"
-      aria-label="pagination"
+      aria-label={ariaLabel ?? t("common.pagination")}
       data-slot="pagination"
       className={cn("mx-auto flex w-full justify-center", className)}
       {...props}
@@ -67,33 +76,41 @@ function PaginationLink({
 
 function PaginationPrevious({
   className,
+  children,
+  "aria-label": ariaLabel,
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
+  const { t } = useTranslation();
+
   return (
     <PaginationLink
-      aria-label="Go to previous page"
+      aria-label={ariaLabel ?? t("common.prev_page")}
       size="default"
       className={cn("gap-1 px-2.5 sm:pl-2.5", className)}
       {...props}
     >
       <ChevronLeftIcon />
-      <span className="hidden sm:block">Previous</span>
+      <span className="hidden sm:block">{children ?? t("common.prev_page")}</span>
     </PaginationLink>
   );
 }
 
 function PaginationNext({
   className,
+  children,
+  "aria-label": ariaLabel,
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
+  const { t } = useTranslation();
+
   return (
     <PaginationLink
-      aria-label="Go to next page"
+      aria-label={ariaLabel ?? t("common.next_page")}
       size="default"
       className={cn("gap-1 px-2.5 sm:pr-2.5", className)}
       {...props}
     >
-      <span className="hidden sm:block">Next</span>
+      <span className="hidden sm:block">{children ?? t("common.next_page")}</span>
       <ChevronRightIcon />
     </PaginationLink>
   );
@@ -103,6 +120,8 @@ function PaginationEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const { t } = useTranslation();
+
   return (
     <span
       aria-hidden
@@ -111,7 +130,7 @@ function PaginationEllipsis({
       {...props}
     >
       <MoreHorizontalIcon className="size-4" />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{t("common.more_pages")}</span>
     </span>
   );
 }
