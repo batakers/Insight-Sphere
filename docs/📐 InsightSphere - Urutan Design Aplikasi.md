@@ -1,7 +1,7 @@
 # InsightSphere — Information Architecture & Living Specification
 
 > **Smart POS untuk Bisnis Fotokopian dengan AI Forecasting**
-> Dokumen ini adalah sumber kebenaran aktual project. Terakhir diperbarui: 2 Mei 2026 (Phase 66).
+> Dokumen ini adalah sumber kebenaran aktual project. Terakhir diperbarui: 9 Mei 2026 (Phase 67 — UI/UX Audit).
 
 ## 📑 Daftar Isi
 
@@ -1266,3 +1266,24 @@ backend/
 ```
 
 **Backend sudah production-ready (~45 endpoints).** Frontend belum terintegrasi — semua data saat ini masih mock.
+
+---
+
+## 10. UI/UX Audit (Phase 67)
+
+> **Living document:** [`docs/UI_UX_AUDIT.md`](./UI_UX_AUDIT.md)
+
+**Skor keseluruhan: 7.4/10** — Fondasi design system sangat kuat, masalah utama di eksekusi konsistensi.
+
+| Kategori | Skor | Status |
+|---|---|---|
+| Accessibility | 7/10 | ⚠️ 29 hardcoded aria-label, 3 focus:ring |
+| Touch & Interaction | 8/10 | ✅ cursor-pointer konsisten |
+| Performance | 7/10 | ⚠️ Beberapa page tanpa skeleton |
+| Layout & Responsive | 8/10 | ✅ Grid responsive baik |
+| Typography & Color | 9/10 | ✅ Token adoption tinggi |
+| Animation & Motion | 8/10 | ✅ prefers-reduced-motion ada |
+| Dark Mode | 7.5/10 | ⚠️ Chart belum dark-aware |
+| Error States | 5/10 | 🔴 not-found/error page belum ada |
+
+**Total temuan: 27 items** — 3 P0, 7 P1, 6 P2, 11 P3 — estimasi ~8 sesi kerja.
