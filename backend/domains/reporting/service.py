@@ -22,13 +22,17 @@ import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from domains.dataset.models import Store
 from domains.finance.models import PettyCashTransaction, CashSession
 from domains.intelligence.models import AIPredictionLog
 from domains.inventory.models import Inventory, Product, StockMovement
+from domains.inventory.service import get_stock_summary
 from domains.reporting.models import (
     ExportFormat, ExportPeriod, ExportType, ReportExport,
 )
+from domains.reporting.schemas import ReportingDashboardStatsResponse
 from domains.sales.models import Transaction, TransactionItem
+from domains.sales.service import get_transaction_summary
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +142,36 @@ class ReportingService:
     @staticmethod
     def list_templates() -> List[dict]:
         return TEMPLATES
+
+    def get_dashboard_stats(
+        self,
+        period: str = "month",
+        store_nbr: Optional[int] = None,
+    ) -> ReportingDashboardStatsResponse:
+        export_period = _coerce_period(period)
+        start, end = _resolve_period(export_period)
+        stock = get_stock_summary(self.db, store_nbr=store_nbr)
+        sales = get_transaction_summary(
+            self.db,
+            date_from=start,
+            date_to=end,
+            group_by="day",
+            store_nbr=store_nbr,
+        )
+        average_order_value = (
+            sales.total_revenue / sales.total_transactions
+            if sales.total_transactions
+            else 0
+        )
+
+        return ReportingDashboardStatsResponse(
+            revenue=sales.total_revenue,
+            transactions=sales.total_transactions,
+            average_order_value=round(average_order_value, 2),
+            gross_margin=self._calculate_gross_margin(start, end, store_nbr),
+            inventory_value=stock.total_inventory_value,
+            low_stock_count=stock.low + stock.critical + stock.out_of_stock,
+        )
 
     # ---------- History (audit) ----------
 
@@ -342,3 +376,35 @@ class ReportingService:
             "date", "store_nbr", "product_sku", "product_name",
             "quantity", "reason", "performed_by",
         ])
+
+    def _calculate_gross_margin(
+        self,
+        start: date,
+        end: date,
+        store_nbr: Optional[int],
+    ) -> float:
+        query = (
+            self.db.query(
+                func.sum(TransactionItem.subtotal).label("revenue"),
+                func.sum(TransactionItem.quantity * Product.cost_price).label("cost"),
+            )
+            .join(Transaction, Transaction.id == TransactionItem.transaction_id)
+            .join(Product, Product.id == TransactionItem.product_id)
+            .filter(Transaction.date >= start, Transaction.date <= end)
+        )
+        if store_nbr is not None:
+            query = query.join(Store, Transaction.branch_id == Store.id).filter(Store.store_nbr == store_nbr)
+
+        row = query.first()
+        revenue = float(row.revenue or 0) if row else 0.0
+        cost = float(row.cost or 0) if row else 0.0
+        if revenue <= 0:
+            return 0.0
+        return round(((revenue - cost) / revenue) * 100, 2)
+
+
+def _coerce_period(period: str) -> ExportPeriod:
+    try:
+        return ExportPeriod(period)
+    except ValueError:
+        return ExportPeriod.MONTH

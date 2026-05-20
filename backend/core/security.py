@@ -6,6 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from core.database import get_db
 from core.config import settings
+from domains.identity.constants import ADMIN_OWNER_ROLES
 
 oauth2_scheme = HTTPBearer()
 SECRET_KEY = settings.SECRET_KEY
@@ -37,7 +38,7 @@ def require_roles(allowed_roles: List[str]):
 
 def require_owner_or_admin(payload: dict = Depends(get_current_user_payload)):
     user_role = payload.get("role")
-    if user_role not in ["owner", "admin"]:
+    if user_role not in ADMIN_OWNER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Requires owner or admin privileges"
@@ -49,7 +50,7 @@ def require_store_access(store_nbr: int, payload: dict):
     user_role = payload.get("role")
     user_store_nbr = payload.get("store_nbr")
     
-    if user_role in ["owner", "admin"]:
+    if user_role in ADMIN_OWNER_ROLES:
         return
         
     if user_store_nbr is not None and int(user_store_nbr) == store_nbr:
@@ -69,4 +70,3 @@ def get_current_user(payload: dict = Depends(get_current_user_payload), db: Sess
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
-

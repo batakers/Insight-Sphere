@@ -105,3 +105,23 @@ class BatchSyncResponse(BaseModel):
     failed: int
     duplicate: int = 0
     details: List[BatchItemResult]
+
+
+class TransactionSummarySeriesItem(BaseModel):
+    date: str
+    revenue: float = 0
+    transactions: int = 0
+
+
+class TransactionPaymentMethodSummary(BaseModel):
+    method: str
+    count: int = 0
+    total: float = 0
+
+
+class TransactionSummaryResponse(BaseModel):
+    total_revenue: float = 0
+    total_transactions: int = 0
+    total_items: int = 0
+    payment_methods: list[TransactionPaymentMethodSummary] = Field(default_factory=list)
+    series: list[TransactionSummarySeriesItem] = Field(default_factory=list)

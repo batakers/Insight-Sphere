@@ -9,6 +9,7 @@ from datetime import datetime
 
 from core.database import get_db
 from core.security import require_owner_or_admin, require_roles, require_store_access, get_current_user_payload
+from domains.identity.constants import STORE_SCOPED_ROLES
 from domains.inventory.schemas import (
     ProductCreate, ProductUpdate, ProductResponse,
     InventoryCreate, InventoryResponse, StockSummaryResponse,
@@ -107,7 +108,7 @@ def list_stock(
     """List stok semua produk beserta status otomatis (SAFE/LOW/CRITICAL/OVERSTOCK)."""
     # Jika role cabang tidak memberikan store_nbr di filter, paksakan ke cabangnya
     # sebelum validasi akses agar default request tidak ditolak.
-    if payload.get("role") in ["cashier", "inventory_manager"] and store_nbr is None:
+    if payload.get("role") in STORE_SCOPED_ROLES and store_nbr is None:
         store_nbr = payload.get("store_nbr")
 
     require_store_access(store_nbr, payload)
@@ -122,7 +123,7 @@ def get_stock_summary(
     payload: dict = Depends(get_current_user_payload)
 ):
     """Ringkasan stok: total produk, aman, menipis, kritis, nilai inventaris."""
-    if payload.get("role") in ["cashier", "inventory_manager"] and store_nbr is None:
+    if payload.get("role") in STORE_SCOPED_ROLES and store_nbr is None:
         store_nbr = payload.get("store_nbr")
 
     require_store_access(store_nbr, payload)

@@ -5,12 +5,12 @@ Bisa di-test tanpa menyalakan server.
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from domains.sales.models import Transaction
 from domains.sales import repository as sales_repo
-from domains.sales.schemas import TransactionCreate, TransactionBatchCreate
+from domains.sales.schemas import TransactionCreate, TransactionBatchCreate, TransactionSummaryResponse
 
 
 from domains.inventory import repository as inv_repo
@@ -41,30 +41,29 @@ def create_single_transaction(db: Session, transaction_data: TransactionCreate):
         if existing:
             return existing
 
-    # 3. ATOMIC PROCESS: Wrap stock deduction + transaction creation in one block
+    # 3. ATOMIC PROCESS: stock deduction + transaction creation share one session.
+    # Repository commit persists both operations together.
     try:
-        # Kita pakai context manager db.begin() untuk atomicity level tinggi
-        with db.begin_nested(): # Menggunakan nested agar bisa rollback sub-operasi jika dipanggil dari batch
-            # A. Deduct Stock for each item
-            for item in transaction_data.items:
-                # Validasi Optimistic Locking di sini
-                success = inv_repo.deduct_stock_atomic(
-                    db, 
-                    str(item.product_id), 
-                    transaction_data.store_nbr, 
-                    item.quantity, 
-                    item.version_at_transaction
-                )
-                if not success:
-                    # Inilah momen di mana kita melempar error 409 Conflict ke UI
-                    raise ValueError("STOK_CONFLICT")
-            
-            # B. Create Transaction Entry
-            total = calculate_total_amount(transaction_data.items)
-            # Override transactional_data branch_id untuk repository
-            transaction_data.branch_id = branch_id
-            
-            return sales_repo.create_transaction(db, transaction_data, total)
+        # A. Deduct Stock for each item
+        for item in transaction_data.items:
+            # Validasi Optimistic Locking di sini
+            success = inv_repo.deduct_stock_atomic(
+                db,
+                str(item.product_id),
+                transaction_data.store_nbr,
+                item.quantity,
+                item.version_at_transaction
+            )
+            if not success:
+                # Inilah momen di mana kita melempar error 409 Conflict ke UI
+                raise ValueError("STOK_CONFLICT")
+
+        # B. Create Transaction Entry
+        total = calculate_total_amount(transaction_data.items)
+        # Override transactional_data branch_id untuk repository
+        transaction_data.branch_id = branch_id
+
+        return sales_repo.create_transaction(db, transaction_data, total)
             
     except ValueError as e:
         # Re-raise untuk di-catch oleh router (409 Conflict)
@@ -138,3 +137,25 @@ def get_today_summary(db: Session, branch_id: Optional[str] = None) -> dict:
         "total_transactions": result.total_transactions or 0,
         "total_revenue": result.total_revenue or 0.0
     }
+
+
+def get_transaction_summary(
+    db: Session,
+    date_from: date,
+    date_to: date,
+    group_by: str = "day",
+    store_nbr: Optional[int] = None,
+) -> TransactionSummaryResponse:
+    """Ringkasan transaksi untuk reporting dashboard dan tab penjualan."""
+    if date_from > date_to:
+        raise ValueError("date_from must be before or equal to date_to")
+
+    normalized_group = group_by if group_by in {"day", "week", "month"} else "day"
+    data = sales_repo.summarize_transactions(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        group_by=normalized_group,
+        store_nbr=store_nbr,
+    )
+    return TransactionSummaryResponse(**data)

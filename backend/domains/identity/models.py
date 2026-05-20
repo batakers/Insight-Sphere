@@ -165,3 +165,52 @@ class PasswordReset(Base):
         default=get_utc_now,
         server_default=text("now()"),
     )
+
+# ============================================================
+# MIRROR SESSION (Admin Mode Cermin)
+# ============================================================
+
+class MirrorSession(Base):
+    """Server-side state untuk Mode Cermin Admin.
+
+    Hanya satu sesi aktif (`ended_at IS NULL`) per `actor_user_id`.
+    Sesi otomatis kadaluwarsa lewat `expires_at`. Semua aktivasi/deaktivasi
+    juga dicatat di `audit_events` (event_type=MIRROR_*).
+    """
+    __tablename__ = "mirror_sessions"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    actor_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_role = Column(String(50), nullable=False)
+    target_role = Column(String(50), nullable=False)
+    started_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=get_utc_now,
+        server_default=text("now()"),
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    end_reason = Column(String(32), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_mirror_sessions_actor_active",
+            "actor_user_id",
+            unique=True,
+            postgresql_where=text("ended_at IS NULL"),
+            sqlite_where=text("ended_at IS NULL"),
+        ),
+    )

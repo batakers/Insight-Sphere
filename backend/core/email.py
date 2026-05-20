@@ -32,7 +32,11 @@ class EmailService:
 
     @staticmethod
     def _resolve_from() -> str:
-        from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "noreply@example.com"
+        from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+        if not from_email:
+            raise RuntimeError(
+                "SMTP_FROM_EMAIL or SMTP_USER must be configured before sending email"
+            )
         from_name = settings.SMTP_FROM_NAME or settings.APP_NAME
         return f"{from_name} <{from_email}>"
 

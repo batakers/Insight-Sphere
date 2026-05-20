@@ -11,15 +11,29 @@ import joblib
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from domains.intelligence.stock_predictor_config import (
+    DEFAULT_SAFETY_STOCK_QUANTILE,
+    DEFAULT_TRAINING_SAMPLE_LIMIT,
+    ENSEMBLE_MODEL_WEIGHT,
+    MAX_SAFETY_STOCK_QUANTILE,
+    MIN_ERROR_BUFFER_SEGMENT_SIZE,
+    MIN_SAFETY_STOCK_QUANTILE,
+    MODEL_ARTIFACTS_DIR,
+    SHAP_EXPLAINER_HORIZON,
+    STOCK_CATEGORICAL_FEATURES,
+    STOCK_FEATURE_COLUMNS,
+    STOCK_HUBER_PARAMS,
+    STOCK_PREDICTOR_HORIZONS,
+    STOCK_TWEEDIE_PARAMS,
+    TARGET_CLIP_QUANTILE,
+    TRAIN_TEST_SPLIT_RATIO,
+)
 from domains.intelligence.models import MLFeatureStore, AIModelMetric
-
-MODEL_ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
-HORIZONS = [7, 14, 21, 28]
 
 
 class SklearnCompatibleXGBRegressor(xgb.XGBRegressor):
@@ -37,25 +51,19 @@ class StockPredictor:
         self.calibrators: Dict[int, Any] = {}       # IsotonicRegression per horizon
         self.explainers: Dict[int, Any] = {}
         self.encoder = None
-        self.training_sample_limit = int(os.getenv("STOCK_TRAINING_LIMIT", "500000"))
-        self.safety_stock_quantile = float(os.getenv("STOCK_SAFETY_STOCK_QUANTILE", "0.85"))
-        self.safety_stock_quantile = min(max(self.safety_stock_quantile, 0.50), 0.95)
+        self.training_sample_limit = int(os.getenv("STOCK_TRAINING_LIMIT", str(DEFAULT_TRAINING_SAMPLE_LIMIT)))
+        self.safety_stock_quantile = float(os.getenv("STOCK_SAFETY_STOCK_QUANTILE", str(DEFAULT_SAFETY_STOCK_QUANTILE)))
+        self.safety_stock_quantile = min(
+            max(self.safety_stock_quantile, MIN_SAFETY_STOCK_QUANTILE),
+            MAX_SAFETY_STOCK_QUANTILE,
+        )
         self.segment_error_buffers: Dict[int, Dict] = {}
         self.family_error_buffers: Dict[int, Dict] = {}
         self.global_error_buffers: Dict[int, float] = {}
         
         # v10: Extended feature set (24 fitur)
-        self.features_order = [
-            'store_nbr', 'family', 'city', 'state', 'cluster', 'store_type',
-            'rolling_7d_sales', 'rolling_14d_sales', 'rolling_30d_sales', 'rolling_7d_std',
-            'is_weekend', 'days_since_payday', 'onpromotion',
-            'lag_1', 'lag_2', 'lag_3', 'lag_7', 'lag_14', 'lag_30',
-            'day_of_week', 'is_month_end', 'is_holiday_or_event', 'days_to_next_holiday',
-            'oil_price'
-        ]
-        self.categorical_features = [
-            'store_nbr', 'family', 'city', 'state', 'cluster', 'store_type'
-        ]
+        self.features_order = list(STOCK_FEATURE_COLUMNS)
+        self.categorical_features = list(STOCK_CATEGORICAL_FEATURES)
         self.model_version = None
         os.makedirs(MODEL_ARTIFACTS_DIR, exist_ok=True)
 
@@ -194,7 +202,7 @@ class StockPredictor:
         }
 
     @staticmethod
-    def _chronological_train_test_split(df: pd.DataFrame, train_ratio: float = 0.8):
+    def _chronological_train_test_split(df: pd.DataFrame, train_ratio: float = TRAIN_TEST_SPLIT_RATIO):
         unique_dates = pd.Series(df['date'].dropna().sort_values().unique())
         if len(unique_dates) > 1:
             split_pos = int(len(unique_dates) * train_ratio)
@@ -226,12 +234,12 @@ class StockPredictor:
 
         self.family_error_buffers[horizon] = {}
         for family, group in evaluated_df.groupby('family'):
-            if len(group) >= 5:
+            if len(group) >= MIN_ERROR_BUFFER_SEGMENT_SIZE:
                 self.family_error_buffers[horizon][str(family)] = self._error_buffer(group['under_forecast_error'])
 
         self.segment_error_buffers[horizon] = {}
         for (store_nbr, family), group in evaluated_df.groupby(['store_nbr', 'family']):
-            if len(group) >= 5:
+            if len(group) >= MIN_ERROR_BUFFER_SEGMENT_SIZE:
                 self.segment_error_buffers[horizon][(int(store_nbr), str(family))] = self._error_buffer(group['under_forecast_error'])
 
     # ========================
@@ -244,13 +252,13 @@ class StockPredictor:
         all_exist = all(
             os.path.exists(os.path.join(MODEL_ARTIFACTS_DIR, f"huber_{h}d.joblib")) and
             os.path.exists(os.path.join(MODEL_ARTIFACTS_DIR, f"tweedie_{h}d.joblib"))
-            for h in HORIZONS
+            for h in STOCK_PREDICTOR_HORIZONS
         ) and os.path.exists(os.path.join(MODEL_ARTIFACTS_DIR, "encoder_v10.joblib"))
 
         if all_exist:
             print("\n[MLOps] Persistence: Semua model v10 ditemukan. Me-load dari joblib...")
             self.encoder = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, "encoder_v10.joblib"))
-            for h in HORIZONS:
+            for h in STOCK_PREDICTOR_HORIZONS:
                 self.models_huber[h] = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, f"huber_{h}d.joblib"))
                 self.models_tweedie[h] = joblib.load(os.path.join(MODEL_ARTIFACTS_DIR, f"tweedie_{h}d.joblib"))
                 cal_path = os.path.join(MODEL_ARTIFACTS_DIR, f"calibrator_{h}d.joblib")
@@ -266,27 +274,11 @@ class StockPredictor:
             return
 
         print("\n🧠 3. MELATIH MODEL AI v10 (Ensemble Huber+Tweedie × 4 Horizons)")
-        train_start_time = datetime.utcnow()
+        train_start_time = datetime.now(timezone.utc)
 
         import category_encoders as ce
 
-        # XGBoost shared hyperparams (v10 tuned)
-        huber_params = dict(
-            n_estimators=300, max_depth=7, learning_rate=0.03,
-            objective='reg:pseudohubererror', huber_slope=1.0,
-            subsample=0.85, colsample_bytree=0.85,
-            reg_alpha=0.1, reg_lambda=1.0,
-            random_state=42, n_jobs=-1
-        )
-        tweedie_params = dict(
-            n_estimators=300, max_depth=7, learning_rate=0.03,
-            objective='reg:tweedie', tweedie_variance_power=1.3,
-            subsample=0.85, colsample_bytree=0.85,
-            reg_alpha=0.1, reg_lambda=1.0,
-            random_state=42, n_jobs=-1
-        )
-
-        for horizon in HORIZONS:
+        for horizon in STOCK_PREDICTOR_HORIZONS:
             target_col = f'avg_demand_{horizon}d'
             print(f"\n  ──── Horizon H+{horizon} ({target_col}) ────")
 
@@ -300,7 +292,7 @@ class StockPredictor:
             train_df, test_df, split_date = self._chronological_train_test_split(labeled_df)
 
             # v10: Clipping di p99.95 (preserve more tail data)
-            p99_train = train_df[target_col].quantile(0.9995)
+            p99_train = train_df[target_col].quantile(TARGET_CLIP_QUANTILE)
             train_df[target_col] = train_df[target_col].clip(upper=p99_train)
             test_df[target_col] = test_df[target_col].clip(upper=p99_train)
 
@@ -316,19 +308,19 @@ class StockPredictor:
             X_test_enc = self.encoder.transform(X_test)
 
             # ── Train Model 1: Huber (robust ke outlier) ──
-            model_huber = SklearnCompatibleXGBRegressor(**huber_params)
+            model_huber = SklearnCompatibleXGBRegressor(**STOCK_HUBER_PARAMS)
             model_huber.fit(X_train_enc, y_train)
             self.models_huber[horizon] = model_huber
 
             # ── Train Model 2: Tweedie (positif natural) ──
-            model_tweedie = SklearnCompatibleXGBRegressor(**tweedie_params)
+            model_tweedie = SklearnCompatibleXGBRegressor(**STOCK_TWEEDIE_PARAMS)
             model_tweedie.fit(X_train_enc, y_train)
             self.models_tweedie[horizon] = model_tweedie
 
             # ── Ensemble: average kedua model ──
             preds_huber = self._clip_predictions(model_huber.predict(X_test_enc))
             preds_tweedie = self._clip_predictions(model_tweedie.predict(X_test_enc))
-            raw_ensemble = (preds_huber + preds_tweedie) / 2.0
+            raw_ensemble = (preds_huber + preds_tweedie) / ENSEMBLE_MODEL_WEIGHT
 
             # ── Isotonic Calibration (bias correction non-linear) ──
             y_test_arr = y_test.values.astype(float)
@@ -365,7 +357,7 @@ class StockPredictor:
                 print(f"  [Warning] Gagal simpan metrik H+{horizon}: {e}")
 
             # SHAP explainer (H+7 only)
-            if horizon == 7:
+            if horizon == SHAP_EXPLAINER_HORIZON:
                 try:
                     self.explainers[horizon] = shap.TreeExplainer(model_huber)
                 except Exception:
@@ -375,7 +367,7 @@ class StockPredictor:
 
         # Persist
         joblib.dump(self.encoder, os.path.join(MODEL_ARTIFACTS_DIR, "encoder_v10.joblib"))
-        for h in HORIZONS:
+        for h in STOCK_PREDICTOR_HORIZONS:
             if h in self.models_huber:
                 joblib.dump(self.models_huber[h], os.path.join(MODEL_ARTIFACTS_DIR, f"huber_{h}d.joblib"))
             if h in self.models_tweedie:
@@ -398,7 +390,7 @@ class StockPredictor:
 
         preds_h = self._clip_predictions(self.models_huber[horizon].predict(X_encoded))
         preds_t = self._clip_predictions(self.models_tweedie[horizon].predict(X_encoded))
-        raw = (preds_h + preds_t) / 2.0
+        raw = (preds_h + preds_t) / ENSEMBLE_MODEL_WEIGHT
 
         if horizon in self.calibrators:
             return self._clip_predictions(self.calibrators[horizon].predict(raw))
@@ -473,13 +465,13 @@ class StockPredictor:
         X_infer_encoded = self.encoder.transform(X_infer)
 
         predictions = []
-        for horizon in HORIZONS:
+        for horizon in STOCK_PREDICTOR_HORIZONS:
             preds = self._predict_single_horizon(X_infer_encoded, horizon)
 
             shap_vals = None
-            if horizon == 7 and 7 in self.explainers:
+            if horizon == SHAP_EXPLAINER_HORIZON and SHAP_EXPLAINER_HORIZON in self.explainers:
                 try:
-                    shap_vals = self.explainers[7](X_infer_encoded)
+                    shap_vals = self.explainers[SHAP_EXPLAINER_HORIZON](X_infer_encoded)
                 except Exception:
                     pass
 
@@ -507,5 +499,5 @@ class StockPredictor:
                     "prediction_level": "family",
                 })
 
-        print(f"[StockPredictor] {len(predictions)} prediksi multi-horizon siap ({len(HORIZONS)} horizons x {len(df_latest)} segments).")
+        print(f"[StockPredictor] {len(predictions)} prediksi multi-horizon siap ({len(STOCK_PREDICTOR_HORIZONS)} horizons x {len(df_latest)} segments).")
         return predictions

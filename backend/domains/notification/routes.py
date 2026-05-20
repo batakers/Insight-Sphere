@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user, require_roles
+from domains.identity.constants import ROLE_ADMIN
 from domains.identity.models import User
 from domains.notification.models import NotificationCategory, NotificationPriority
 from domains.notification.schemas import (
@@ -92,7 +93,7 @@ def mark_notification_read(
     response_model=NotificationRead,
     status_code=status.HTTP_201_CREATED,
     summary="[ADMIN] Trigger notifikasi manual untuk testing",
-    dependencies=[Depends(require_roles(["admin"]))],
+    dependencies=[Depends(require_roles([ROLE_ADMIN]))],
 )
 def test_trigger_notification(
     payload: NotificationCreate,

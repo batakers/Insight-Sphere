@@ -3,12 +3,19 @@ from typing import Optional
 from datetime import datetime
 from enum import Enum
 
+from domains.identity.constants import (
+    ROLE_ADMIN,
+    ROLE_CASHIER,
+    ROLE_INVENTORY_MANAGER,
+    ROLE_OWNER,
+)
+
 
 class RoleEnum(str, Enum):
-    ADMIN = "admin"
-    OWNER = "owner"
-    INVENTORY_MANAGER = "inventory_manager"
-    CASHIER = "cashier"
+    ADMIN = ROLE_ADMIN
+    OWNER = ROLE_OWNER
+    INVENTORY_MANAGER = ROLE_INVENTORY_MANAGER
+    CASHIER = ROLE_CASHIER
 
 class UserBase(BaseModel):
     username: str = Field(..., description="Username untuk login")
@@ -42,15 +49,22 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = Field(None, description="True=aktif, False=soft-deleted")
 
 
+class SelfProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    position: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
 from uuid import UUID
 
 class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     is_active: bool
     two_factor_enabled: bool = False
-
-    class Config:
-        from_attributes = True
 
 
 class Token(BaseModel):
@@ -186,3 +200,18 @@ class LoginChallengeResponse(BaseModel):
 class TwoFactorLoginRequest(BaseModel):
     challenge_token: str
     code: str = Field(..., min_length=6, max_length=8)
+
+# ============================================================
+# Mirror Mode (Mode Cermin) — server-side session
+# ============================================================
+
+class MirrorStartRequest(BaseModel):
+    target_role: RoleEnum
+
+class MirrorSessionResponse(BaseModel):
+    id: UUID
+    actor_user_id: UUID
+    actor_role: str
+    target_role: str
+    started_at: datetime
+    expires_at: datetime

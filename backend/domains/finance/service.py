@@ -3,8 +3,10 @@ Finance Service — Business Logic Layer.
 Logika hitungan keuangan kasir: selisih, deteksi fraud, validasi sesi.
 Bisa di-test secara murni tanpa database.
 """
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+from uuid import UUID
 
 from domains.finance import repository as finance_repo
 from domains.finance.schemas import CashSessionCreate, CashSessionClose, PettyCashCreate
@@ -42,9 +44,21 @@ def open_shift(db: Session, session_data: CashSessionCreate):
     return session
 
 
+def list_cash_sessions(db: Session, limit: int = 50, offset: int = 0):
+    items, total = finance_repo.list_cash_sessions(db, limit=limit, offset=offset)
+    return {"items": items, "total": total}
+
+
+def get_cash_session_detail(db: Session, session_id: UUID):
+    session = finance_repo.get_cash_session_by_id(db, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Cash session not found")
+    return session
+
+
 def record_petty_cash(db: Session, expense_data: PettyCashCreate):
     """Catat pengeluaran petty cash. Pastikan sesi masih aktif."""
-    db_session = finance_repo.get_open_session_by_id(db, str(expense_data.cash_session_id))
+    db_session = finance_repo.get_open_session_by_id(db, expense_data.cash_session_id)
     if not db_session:
         raise ValueError("Active cash session not found.")
     
@@ -75,8 +89,8 @@ def close_shift(db: Session, session_id: str, close_data: CashSessionClose):
     if not db_session:
         raise ValueError("Cash session not found or already closed.")
     
-    cash_sales = finance_repo.sum_cash_sales(db, session_id)
-    petty_expenses = finance_repo.sum_petty_expenses(db, session_id)
+    cash_sales = finance_repo.sum_cash_sales(db, db_session.id)
+    petty_expenses = finance_repo.sum_petty_expenses(db, db_session.id)
     
     expected = calculate_expected_balance(db_session.opening_balance, cash_sales, petty_expenses)
     difference = close_data.actual_closing_balance - expected

@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.exceptions import APIException, get_language
-from domains.identity import service, schemas
+from core.rate_limit import limiter
+from domains.identity import mirror_service, service, schemas
+from domains.identity.constants import ADMIN_OWNER_ROLES, ROLE_ADMIN
 from domains.identity.models import LoginStatus, User
 from core.security import get_current_user, require_owner_or_admin
 
@@ -49,6 +51,7 @@ def _issue_access_token(user: User) -> dict:
 
 
 @router.post("/login")
+@limiter.limit("5/minute")
 def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -118,6 +121,7 @@ def login_for_access_token(
 
 
 @router.post("/login/verify-2fa", response_model=schemas.Token)
+@limiter.limit("10/minute")
 def login_verify_2fa(
     payload: schemas.TwoFactorLoginRequest,
     request: Request,
@@ -151,6 +155,62 @@ def read_users_me(current_user: schemas.UserResponse = Depends(get_current_user)
     return current_user
 
 
+@router.patch("/me", response_model=schemas.UserResponse)
+def update_users_me(
+    payload: schemas.SelfProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return service.update_self_profile(db, current_user, payload)
+
+# ----------------------------------------------------------------
+# Mirror Mode (Mode Cermin) — admin server-side session + audit log
+# ----------------------------------------------------------------
+
+@router.get("/mirror", response_model=schemas.MirrorSessionResponse | None)
+def get_mirror_session(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return active mirror session untuk admin saat ini, atau null."""
+    if current_user.role != ROLE_ADMIN:
+        return None
+    session = mirror_service.get_active_session(db, current_user)
+    return mirror_service.serialize(session)
+
+@router.post(
+    "/mirror",
+    response_model=schemas.MirrorSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("10/minute")
+def start_mirror_session(
+    payload: schemas.MirrorStartRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aktifkan Mode Cermin untuk admin (server-side). Diaudit."""
+    ip, user_agent = _extract_client_meta(request)
+    session = mirror_service.start_session(
+        db,
+        user=current_user,
+        target_role=payload.target_role.value,
+        ip_address=ip,
+        user_agent=user_agent,
+    )
+    return mirror_service.serialize(session)
+
+@router.delete("/mirror", status_code=status.HTTP_204_NO_CONTENT)
+def stop_mirror_session(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Akhiri sesi mirror aktif (idempotent)."""
+    mirror_service.end_active_session(db, user=current_user)
+    return None
+
+
 @router.post(
     "/refresh",
     summary="Refresh access token (rotate tanpa login ulang)",
@@ -182,7 +242,7 @@ def read_login_history(
 # Secret endpoint for admin creation (example)
 @router.post("/register-admin", response_model=schemas.UserResponse)
 def register_admin(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    if user.role.value != "admin":
+    if user.role.value != ROLE_ADMIN:
         raise HTTPException(status_code=400, detail="Use this endpoint only to create admin")
     existing_user = service.get_user_by_username(db, user.username)
     if existing_user:
@@ -255,6 +315,40 @@ def revoke_invitation(
     return None
 
 
+@router.get(
+    "/invite-preview/{token}",
+    summary="Preview detail undangan sebelum diterima (PUBLIC, no auth)",
+)
+def preview_invite(
+    token: str = Path(..., min_length=10),
+    db: Session = Depends(get_db),
+):
+    """Return metadata undangan (role, expiry, inviter) tanpa data sensitif."""
+    from datetime import datetime, timezone
+    invite = service.get_invite_by_token(db, token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Token undangan tidak valid")
+    if invite.accepted:
+        raise HTTPException(status_code=400, detail="Undangan ini sudah diterima")
+    expires_at = invite.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Undangan sudah kedaluwarsa")
+
+    inviter = service.get_user_by_id(db, invite.invited_by) if invite.invited_by else None
+    inviter_name = (inviter.full_name or inviter.username) if inviter else "InsightSphere"
+
+    return {
+        "role": invite.role,
+        "full_name": invite.full_name,
+        "email": invite.email,
+        "store_nbr": invite.store_nbr,
+        "expires_at": expires_at.isoformat(),
+        "inviter_name": inviter_name,
+    }
+
+
 @router.post(
     "/accept-invite/{token}",
     response_model=schemas.UserResponse,
@@ -279,8 +373,10 @@ def accept_invitation(
     response_model=schemas.GenericMessage,
     summary="Request reset PIN via email (PUBLIC, no auth)",
 )
+@limiter.limit("3/minute")
 def forgot_password(
     payload: schemas.ForgotPasswordRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
@@ -384,7 +480,7 @@ def two_factor_disable(
 
 def _require_admin_or_owner_user(current_user: User = Depends(get_current_user)) -> User:
     """Dependency: return User object, raise 403 jika role bukan admin/owner."""
-    if current_user.role not in ("admin", "owner"):
+    if current_user.role not in ADMIN_OWNER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Requires owner or admin privileges",

@@ -4,24 +4,42 @@ Hanya query database. Tidak ada hitungan bisnis di sini.
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from uuid import UUID
 
 from domains.finance.models import CashSession, PettyCashTransaction
 from domains.sales.models import Transaction
 from domains.observability.models import AuditEvent
 
 
+def _coerce_uuid(value):
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def get_open_session_by_cashier(db: Session, cashier_id):
     """Cek apakah kasir masih punya sesi menggantung."""
+    cashier_uuid = _coerce_uuid(cashier_id)
+    if cashier_uuid is None:
+        return None
+
     return db.query(CashSession).filter(
-        CashSession.cashier_id == cashier_id,
+        CashSession.cashier_id == cashier_uuid,
         CashSession.status == "open"
     ).first()
 
 
-def get_open_session_by_id(db: Session, session_id: str):
+def get_open_session_by_id(db: Session, session_id):
     """Ambil sesi kasir berdasarkan ID (harus masih open)."""
+    session_uuid = _coerce_uuid(session_id)
+    if session_uuid is None:
+        return None
+
     return db.query(CashSession).filter(
-        CashSession.id == session_id,
+        CashSession.id == session_uuid,
         CashSession.status == "open"
     ).first()
 
@@ -37,18 +55,41 @@ def create_session(db: Session, cashier_id, store_id, opening_balance) -> CashSe
     return db_session
 
 
-def sum_cash_sales(db: Session, session_id: str) -> float:
+def list_cash_sessions(db: Session, limit: int = 50, offset: int = 0):
+    """Ambil daftar sesi kasir terbaru untuk histori finance."""
+    query = db.query(CashSession).order_by(CashSession.start_time.desc())
+    total = query.count()
+    return query.offset(offset).limit(limit).all(), total
+
+
+def get_cash_session_by_id(db: Session, session_id):
+    """Ambil sesi kasir berdasarkan ID tanpa batasan status."""
+    session_uuid = _coerce_uuid(session_id)
+    if session_uuid is None:
+        return None
+    return db.query(CashSession).filter(CashSession.id == session_uuid).first()
+
+
+def sum_cash_sales(db: Session, session_id) -> float:
     """Total penjualan tunai untuk session tertentu."""
+    session_uuid = _coerce_uuid(session_id)
+    if session_uuid is None:
+        return 0.0
+
     return db.query(func.sum(Transaction.total_amount)).filter(
-        Transaction.cash_session_id == session_id,
+        Transaction.cash_session_id == session_uuid,
         Transaction.payment_method == "CASH"
     ).scalar() or 0.0
 
 
-def sum_petty_expenses(db: Session, session_id: str) -> float:
+def sum_petty_expenses(db: Session, session_id) -> float:
     """Total pengeluaran petty cash untuk session tertentu."""
+    session_uuid = _coerce_uuid(session_id)
+    if session_uuid is None:
+        return 0.0
+
     return db.query(func.sum(PettyCashTransaction.amount)).filter(
-        PettyCashTransaction.cash_session_id == session_id,
+        PettyCashTransaction.cash_session_id == session_uuid,
         PettyCashTransaction.type == "expense"
     ).scalar() or 0.0
 

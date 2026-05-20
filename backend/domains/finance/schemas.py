@@ -31,6 +31,11 @@ class CashSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CashSessionListResponse(BaseModel):
+    items: list[CashSessionResponse]
+    total: int
+
+
 class PettyCashCreate(BaseModel):
     cash_session_id: UUID
     amount: float = Field(..., gt=0)

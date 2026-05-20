@@ -38,6 +38,15 @@ class TemplateInfo(BaseModel):
     columns: List[str]
 
 
+class ReportingDashboardStatsResponse(BaseModel):
+    revenue: float = 0
+    transactions: int = 0
+    average_order_value: float = 0
+    gross_margin: float = 0
+    inventory_value: float = 0
+    low_stock_count: int = 0
+
+
 class ExportHistoryItem(BaseModel):
     """1 baris audit log generation."""
     model_config = ConfigDict(from_attributes=True)

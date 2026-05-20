@@ -18,7 +18,8 @@ import os
 from domains.identity.models import (
     User, LoginActivity, LoginStatus, UserInvite, PasswordReset,
 )
-from domains.identity.schemas import UserCreate, UserUpdate
+from domains.identity.schemas import SelfProfileUpdate, UserCreate, UserUpdate
+from domains.identity.constants import STORE_SCOPED_ROLES
 from core.config import settings
 from core.email import EmailService
 
@@ -61,9 +62,9 @@ def create_user(db: Session, user: UserCreate):
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -127,11 +128,30 @@ def get_user_login_history(
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
-
 def update_user_pin(db: Session, user: User, new_pin: str) -> User:
     user.pin_hash = get_pin_hash(new_pin)
     db.commit()
     db.refresh(user)
+    return user
+
+def update_self_profile(db: Session, user: User, payload: SelfProfileUpdate) -> User:
+    updates = payload.model_dump(exclude_unset=True)
+
+    new_email = updates.get("email")
+    if new_email and new_email != user.email:
+        existing = get_user_by_email(db, new_email)
+        if existing and existing.id != user.id:
+            raise HTTPException(
+                status_code=409,
+                detail="Email already registered to another user.",
+            )
+
+    for field, value in updates.items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    logger.info("Self profile updated user=%s fields=%s", user.id, list(updates.keys()))
     return user
 
 
@@ -232,7 +252,7 @@ def update_user(
     if hasattr(effective_role, "value"):
         effective_role = effective_role.value
     effective_store_nbr = updates.get("store_nbr", user.store_nbr)
-    if effective_role in ("cashier", "inventory_manager") and effective_store_nbr is None:
+    if effective_role in STORE_SCOPED_ROLES and effective_store_nbr is None:
         raise HTTPException(
             status_code=400,
             detail=f"Role '{effective_role}' requires store_nbr to be set.",
@@ -631,7 +651,7 @@ def verify_2fa_for_login(db: Session, user: User, code: str) -> bool:
 
 def create_2fa_challenge_token(user: User) -> str:
     """JWT pendek (5 menit) yang membuktikan user sudah pass step-1 (PIN)."""
-    expire = datetime.utcnow() + timedelta(minutes=CHALLENGE_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=CHALLENGE_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user.username,
         "user_id": str(user.id),

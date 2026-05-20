@@ -15,10 +15,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.security import get_current_user, require_owner_or_admin
+from core.security import get_current_user, get_current_user_payload, require_owner_or_admin
+from domains.identity.constants import ADMIN_OWNER_ROLES, ROLE_CASHIER
 from domains.identity.models import User
 from domains.reporting.schemas import (
-    ExportHistoryItem, ExportRequest, TemplateInfo,
+    ExportHistoryItem, ExportRequest, ReportingDashboardStatsResponse, TemplateInfo,
 )
 from domains.reporting.service import ReportingService, media_type_for
 
@@ -42,6 +43,20 @@ def list_templates(
     return service.list_templates()
 
 
+@router.get(
+    "/dashboard-stats",
+    response_model=ReportingDashboardStatsResponse,
+    summary="Ringkasan KPI dashboard reporting",
+)
+def dashboard_stats(
+    period: str = Query("month", pattern="^(week|month|quarter|year)$"),
+    store_nbr: Optional[int] = Query(None),
+    service: ReportingService = Depends(get_reporting_service),
+    _user=Depends(get_current_user_payload),
+):
+    return service.get_dashboard_stats(period=period, store_nbr=store_nbr)
+
+
 @router.post(
     "/export",
     summary="Generate dan download report (CSV/XLSX)",
@@ -61,7 +76,7 @@ def generate_export(
     """
     # Enforce branch scoping untuk cashier
     effective_store_nbr: Optional[int] = payload.store_nbr
-    if current_user.role == "cashier":
+    if current_user.role == ROLE_CASHIER:
         effective_store_nbr = current_user.store_nbr
 
     buf, filename, row_count = service.generate_export(
@@ -93,5 +108,5 @@ def list_history(
     service: ReportingService = Depends(get_reporting_service),
 ):
     # admin & owner lihat semua history; role lain hanya miliknya sendiri
-    requested_by = None if current_user.role in ("admin", "owner") else current_user.id
+    requested_by = None if current_user.role in ADMIN_OWNER_ROLES else current_user.id
     return service.list_export_history(requested_by=requested_by, limit=limit)
