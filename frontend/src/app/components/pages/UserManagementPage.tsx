@@ -42,6 +42,7 @@ import { TABLE } from "@/app/lib/data";
 import { FOCUS } from "@/app/lib/forms";
 import { BTN } from "@/app/lib/buttons";
 import { EmptyState } from "@/app/components/ui/EmptyState";
+import { FilterSelect, type FilterSelectOption } from "@/app/components/ui/FilterSelect";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
 import { isDemoDataEnabled } from "@/app/lib/demo-mode";
@@ -573,67 +574,39 @@ export default function UserManagementPage() {
               />
             </div>
 
-            {/* Role filter */}
-            <div className="flex items-center gap-2">
-              <Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="role-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>
-                {t("um.filter.role")}
-              </label>
-              <select
-                id="role-filter"
-                value={roleFilter}
-                onChange={(e) => {
-                  setRoleFilter(e.target.value as "all" | UserRole);
-                  setCurrentPage(1);
-                }}
-                className={cn(
-                  "border",
-                  C.neutral.border,
-                  R_COMPONENT.input,
-                  "px-3 py-2",
-                  "bg-white dark:bg-slate-900",
-                  "text-slate-900 dark:text-slate-100",
-                  T.body,
-                  FOCUS.ring
-                )}
-              >
-                <option value="all">{t("um.filter.allRoles")}</option>
-                <option value="owner">{t("um.role.owner")}</option>
-                <option value="admin">{t("um.role.admin")}</option>
-                <option value="cashier">{t("um.role.cashier")}</option>
-                <option value="inventory_manager">{t("um.role.inventory_manager")}</option>
-              </select>
-            </div>
+            <FilterSelect<"all" | UserRole>
+              id="role-filter"
+              label={t("um.filter.role")}
+              value={roleFilter}
+              icon={<Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("um.filter.allRoles") },
+                { value: "owner", label: t("um.role.owner") },
+                { value: "admin", label: t("um.role.admin") },
+                { value: "cashier", label: t("um.role.cashier") },
+                { value: "inventory_manager", label: t("um.role.inventory_manager") },
+              ] satisfies FilterSelectOption<"all" | UserRole>[]}
+              onValueChange={(nextValue) => {
+                setRoleFilter(nextValue);
+                setCurrentPage(1);
+              }}
+            />
 
-            {/* Status filter */}
-            <div className="flex items-center gap-2">
-              <Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="status-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>
-                {t("um.filter.status")}
-              </label>
-              <select
-                id="status-filter"
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as "all" | "active" | "inactive");
-                  setCurrentPage(1);
-                }}
-                className={cn(
-                  "border",
-                  C.neutral.border,
-                  R_COMPONENT.input,
-                  "px-3 py-2",
-                  "bg-white dark:bg-slate-900",
-                  "text-slate-900 dark:text-slate-100",
-                  T.body,
-                  FOCUS.ring
-                )}
-              >
-                <option value="all">{t("um.filter.allStatuses")}</option>
-                <option value="active">{t("um.status.active")}</option>
-                <option value="inactive">{t("um.status.inactive")}</option>
-              </select>
-            </div>
+            <FilterSelect<"all" | "active" | "inactive">
+              id="status-filter"
+              label={t("um.filter.status")}
+              value={statusFilter}
+              icon={<Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("um.filter.allStatuses") },
+                { value: "active", label: t("um.status.active") },
+                { value: "inactive", label: t("um.status.inactive") },
+              ] satisfies FilterSelectOption<"all" | "active" | "inactive">[]}
+              onValueChange={(nextValue) => {
+                setStatusFilter(nextValue);
+                setCurrentPage(1);
+              }}
+            />
           </div>
         </div>
 

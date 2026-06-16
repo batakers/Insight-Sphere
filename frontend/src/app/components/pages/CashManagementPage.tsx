@@ -23,6 +23,7 @@ import { btn } from "@/app/lib/buttons";
 import { CARD, MODAL, DRAWER } from "@/app/lib/containers";
 import { TABLE, BADGE } from "@/app/lib/data";
 import { EmptyState } from "@/app/components/ui/EmptyState";
+import { FilterSelect, type FilterSelectOption } from "@/app/components/ui/FilterSelect";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
 import { isDemoDataEnabled } from "@/app/lib/demo-mode";
@@ -257,39 +258,61 @@ export default function CashManagementPage() {
                 value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                 className={cn("w-full", PAD.inputMd, "pl-10", R_COMPONENT.input, "border", C.neutral.border, "bg-white dark:bg-slate-900", "text-slate-900 dark:text-slate-100", "placeholder:text-slate-400 dark:placeholder:text-slate-500", FOCUS.ring)} />
             </div>
-            <div className={cn("flex items-center", GAP.default)}>
-              <Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="type-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>{t("cm.filter.type")}</label>
-              <select id="type-filter" value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value as CashType | "all"); setCategoryFilter("all"); }}
-                className={cn("border", C.neutral.border, R_COMPONENT.input, "px-3 py-2", "bg-white dark:bg-slate-900", "text-slate-900 dark:text-slate-100", T.body, FOCUS.ring)}>
-                <option value="all">{t("cm.filter.allTypes")}</option><option value="income">{t("cm.type.income")}</option><option value="expense">{t("cm.type.expense")}</option><option value="adjustment">{t("cm.type.adjustment")}</option><option value="transfer">{t("cm.type.transfer")}</option>
-              </select>
-            </div>
-            <div className={cn("flex items-center", GAP.default)}>
-              <Tag className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="category-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>{t("cm.filter.category")}</label>
-              <select id="category-filter" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
-                className={cn("border", C.neutral.border, R_COMPONENT.input, "px-3 py-2", "bg-white dark:bg-slate-900", "text-slate-900 dark:text-slate-100", T.body, FOCUS.ring)}>
-                <option value="all">{t("cm.filter.allCategories")}</option>
-                {(typeFilter === "all" ? [...new Set(Object.values(CATEGORIES_BY_TYPE).flat())] : CATEGORIES_BY_TYPE[typeFilter]).map((c) => (<option key={c} value={c}>{c}</option>))}
-              </select>
-            </div>
-            <div className={cn("flex items-center", GAP.default)}>
-              <CheckCircle2 className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="status-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>{t("cm.filter.status")}</label>
-              <select id="status-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as CashEntry["status"] | "all")}
-                className={cn("border", C.neutral.border, R_COMPONENT.input, "px-3 py-2", "bg-white dark:bg-slate-900", "text-slate-900 dark:text-slate-100", T.body, FOCUS.ring)}>
-                <option value="all">{t("cm.filter.allStatuses")}</option><option value="completed">{t("cm.status.completed")}</option><option value="pending">{t("cm.status.pending")}</option><option value="cancelled">{t("cm.status.cancelled")}</option>
-              </select>
-            </div>
-            <div className={cn("flex items-center", GAP.default)}>
-              <CalendarDays className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="date-period" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>{t("cm.filter.period")}</label>
-              <select id="date-period" value={datePeriod} onChange={(e) => setDatePeriod(e.target.value)}
-                className={cn("border", C.neutral.border, R_COMPONENT.input, "px-3 py-2", "bg-white dark:bg-slate-900", "text-slate-900 dark:text-slate-100", T.body, FOCUS.ring)}>
-                {DATE_PERIODS.map((p) => (<option key={p} value={p}>{p}</option>))}
-              </select>
-            </div>
+            <FilterSelect<CashType | "all">
+              id="type-filter"
+              label={t("cm.filter.type")}
+              value={typeFilter}
+              icon={<Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("cm.filter.allTypes") },
+                { value: "income", label: t("cm.type.income") },
+                { value: "expense", label: t("cm.type.expense") },
+                { value: "adjustment", label: t("cm.type.adjustment") },
+                { value: "transfer", label: t("cm.type.transfer") },
+              ] satisfies FilterSelectOption<CashType | "all">[]}
+              onValueChange={(nextValue) => {
+                setTypeFilter(nextValue);
+                setCategoryFilter("all");
+              }}
+            />
+
+            <FilterSelect<string>
+              id="category-filter"
+              label={t("cm.filter.category")}
+              value={categoryFilter}
+              icon={<Tag className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("cm.filter.allCategories") },
+                ...(typeFilter === "all"
+                  ? [...new Set(Object.values(CATEGORIES_BY_TYPE).flat())]
+                  : CATEGORIES_BY_TYPE[typeFilter]
+                ).map((category) => ({ value: category, label: category })),
+              ]}
+              onValueChange={setCategoryFilter}
+            />
+
+            <FilterSelect<CashEntry["status"] | "all">
+              id="status-filter"
+              label={t("cm.filter.status")}
+              value={statusFilter}
+              icon={<CheckCircle2 className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("cm.filter.allStatuses") },
+                { value: "completed", label: t("cm.status.completed") },
+                { value: "pending", label: t("cm.status.pending") },
+                { value: "cancelled", label: t("cm.status.cancelled") },
+              ] satisfies FilterSelectOption<CashEntry["status"] | "all">[]}
+              onValueChange={setStatusFilter}
+            />
+
+            <FilterSelect<string>
+              id="date-period"
+              label={t("cm.filter.period")}
+              value={datePeriod}
+              icon={<CalendarDays className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={DATE_PERIODS.map((period) => ({ value: period, label: period }))}
+              onValueChange={setDatePeriod}
+            />
           </div>
         </div>
 

@@ -45,6 +45,7 @@ import { BTN, btn } from "@/app/lib/buttons";
 import { CARD, MODAL, DRAWER } from "@/app/lib/containers";
 import { TABLE, BADGE, KPI } from "@/app/lib/data";
 import { EmptyState } from "@/app/components/ui/EmptyState";
+import { FilterSelect, type FilterSelectOption } from "@/app/components/ui/FilterSelect";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { useTranslation } from "@/app/i18n";
 import { isDemoDataEnabled } from "@/app/lib/demo-mode";
@@ -398,63 +399,48 @@ export default function StockMovementPage() {
               />
             </div>
 
-            {/* Type filter */}
-            <div className="flex items-center gap-2">
-              <Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="type-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>
-                {t("sm.filter.type")}
-              </label>
-              <select
-                id="type-filter"
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as MovementType | "all")}
-                className={cn(SELECT.base, SELECT.size.md)}
-              >
-                <option value="all">{t("sm.filter.allTypes")}</option>
-                <option value="in">{t("sm.type.in")}</option>
-                <option value="out">{t("sm.type.out")}</option>
-                <option value="adjustment">{t("sm.type.adjustment")}</option>
-                <option value="transfer">{t("sm.type.transfer")}</option>
-                <option value="return">{t("sm.type.return")}</option>
-              </select>
-            </div>
+            <FilterSelect<MovementType | "all">
+              id="type-filter"
+              label={t("sm.filter.type")}
+              value={typeFilter}
+              icon={<Filter className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("sm.filter.allTypes") },
+                { value: "in", label: t("sm.type.in") },
+                { value: "out", label: t("sm.type.out") },
+                { value: "adjustment", label: t("sm.type.adjustment") },
+                { value: "transfer", label: t("sm.type.transfer") },
+                { value: "return", label: t("sm.type.return") },
+              ] satisfies FilterSelectOption<MovementType | "all">[]}
+              onValueChange={setTypeFilter}
+            />
 
-            {/* Category filter */}
-            <div className="flex items-center gap-2">
-              <Tag className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="category-filter" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>
-                {t("sm.filter.category")}
-              </label>
-              <select
-                id="category-filter"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className={cn(SELECT.base, SELECT.size.md)}
-              >
-                <option value="all">{t("sm.filter.allCategories")}</option>
-                {INVENTORY_CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>{t(c.labelKey)}</option>
-                ))}
-              </select>
-            </div>
+            <FilterSelect<string>
+              id="category-filter"
+              label={t("sm.filter.category")}
+              value={categoryFilter}
+              icon={<Tag className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={[
+                { value: "all", label: t("sm.filter.allCategories") },
+                ...INVENTORY_CATEGORIES.map((category) => ({
+                  value: category.value,
+                  label: t(category.labelKey),
+                })),
+              ]}
+              onValueChange={setCategoryFilter}
+            />
 
-            {/* Date period */}
-            <div className="flex items-center gap-2">
-              <CalendarDays className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />
-              <label htmlFor="date-period" className={cn(T.bodyEmphasis, "text-slate-700 dark:text-slate-300")}>
-                {t("sm.filter.period")}
-              </label>
-              <select
-                id="date-period"
-                value={datePeriod}
-                onChange={(e) => setDatePeriod(e.target.value)}
-                className={cn(SELECT.base, SELECT.size.md)}
-              >
-                {STOCK_MOVEMENT_PERIODS.map((p) => (
-                  <option key={p.value} value={p.value}>{t(p.labelKey)}</option>
-                ))}
-              </select>
-            </div>
+            <FilterSelect<string>
+              id="date-period"
+              label={t("sm.filter.period")}
+              value={datePeriod}
+              icon={<CalendarDays className={cn(ICON.sm, "text-slate-400")} aria-hidden="true" />}
+              options={STOCK_MOVEMENT_PERIODS.map((period) => ({
+                value: period.value,
+                label: t(period.labelKey),
+              }))}
+              onValueChange={setDatePeriod}
+            />
           </div>
         </div>
 
