@@ -17,6 +17,7 @@ from domains.intelligence import models as _intelligence
 from domains.inventory import models as _inventory
 from domains.notification import models as _notification
 from domains.reporting import models as _reporting
+from domains.branches import models as _branches
 
 # 1. Konfigurasi Sistem Logging
 is_vercel = os.getenv("VERCEL") == "1"
@@ -155,6 +156,7 @@ from domains.dataset.router import router as dataset_router
 from domains.notification.routes import router as notification_router
 from domains.reporting.router import router as reporting_router
 from domains.dashboard.router import router as dashboard_router
+from domains.branches.router import router as branches_router
 
 app.include_router(sales_router)
 app.include_router(finance_router)
@@ -165,6 +167,7 @@ app.include_router(dataset_router)
 app.include_router(notification_router)
 app.include_router(reporting_router)
 app.include_router(dashboard_router)
+app.include_router(branches_router)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

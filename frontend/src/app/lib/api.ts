@@ -42,8 +42,14 @@ interface PydanticErrorItem {
   loc?: (string | number)[];
 }
 
+interface StructuredErrorDetail {
+  message?: string;
+  code?: string;
+  [key: string]: unknown;
+}
+
 interface BackendErrorBody {
-  detail?: string | PydanticErrorItem[];
+  detail?: string | PydanticErrorItem[] | StructuredErrorDetail;
   traceback?: string;
   code?: string;
   target_role?: string;
@@ -86,6 +92,14 @@ function normalizeErrorMessage(body: BackendErrorBody | undefined, fallback: str
   if (typeof body.detail === "string") return body.detail;
   if (Array.isArray(body.detail) && body.detail.length > 0) {
     return body.detail[0].msg;
+  }
+  if (
+    body.detail &&
+    typeof body.detail === "object" &&
+    !Array.isArray(body.detail) &&
+    typeof body.detail.message === "string"
+  ) {
+    return body.detail.message;
   }
   return fallback;
 }
