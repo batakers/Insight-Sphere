@@ -44,7 +44,7 @@ Do not commit during execution unless the user explicitly authorizes commits. Us
 - Create: `frontend/src/app/components/ui/FilterSelect.tsx`
 - Test: `frontend/tests/ui/filter-select-standardization.test.mjs` in Task 5
 
-- [ ] **Step 1: Create the wrapper file**
+- [x] **Step 1: Create the wrapper file**
 
 Create `frontend/src/app/components/ui/FilterSelect.tsx` with this content:
 
@@ -141,7 +141,7 @@ export function FilterSelect<TValue extends string = string>({
 }
 ```
 
-- [ ] **Step 2: Run typecheck for the new component**
+- [x] **Step 2: Run typecheck for the new component**
 
 Run:
 
@@ -152,7 +152,7 @@ npm run typecheck
 
 Expected: this may fail before page migration if no file imports the component, but it must not report syntax/type errors inside `FilterSelect.tsx`.
 
-- [ ] **Step 3: Checkpoint**
+- [x] **Step 3: Checkpoint**
 
 Run:
 
@@ -168,7 +168,7 @@ Expected: diff shows only the new wrapper file.
 - Modify: `frontend/src/app/components/pages/UserManagementPage.tsx`
 - Test: `frontend/tests/ui/filter-select-standardization.test.mjs` in Task 5
 
-- [ ] **Step 1: Add the wrapper import**
+- [x] **Step 1: Add the wrapper import**
 
 Add this import near the other UI component imports:
 
@@ -176,7 +176,7 @@ Add this import near the other UI component imports:
 import { FilterSelect, type FilterSelectOption } from "@/app/components/ui/FilterSelect";
 ```
 
-- [ ] **Step 2: Replace the role and status filter controls**
+- [x] **Step 2: Replace the role and status filter controls**
 
 Replace the existing role/status filter `<div>` blocks around `id="role-filter"` and `id="status-filter"` with:
 
@@ -216,7 +216,7 @@ Replace the existing role/status filter `<div>` blocks around `id="role-filter"`
             />
 ```
 
-- [ ] **Step 3: Verify non-goal selects remain untouched**
+- [x] **Step 3: Verify non-goal selects remain untouched**
 
 Run:
 
@@ -230,7 +230,7 @@ Expected:
 - No `<select>` remains for `status-filter`.
 - Native `<select>` controls may still exist later in the add/edit user modal.
 
-- [ ] **Step 4: Run typecheck**
+- [x] **Step 4: Run typecheck**
 
 Run:
 
@@ -241,7 +241,7 @@ npm run typecheck
 
 Expected: PASS, or fail only on pre-existing unrelated errors. If it fails, inspect the exact errors before continuing.
 
-- [ ] **Step 5: Checkpoint**
+- [x] **Step 5: Checkpoint**
 
 Run:
 
@@ -257,7 +257,7 @@ Expected: diff shows only imports and the two filter controls changed.
 - Modify: `frontend/src/app/components/pages/CashManagementPage.tsx`
 - Test: `frontend/tests/ui/filter-select-standardization.test.mjs` in Task 5
 
-- [ ] **Step 1: Add the wrapper import**
+- [x] **Step 1: Add the wrapper import**
 
 Add this import near the other UI component imports:
 
@@ -265,7 +265,7 @@ Add this import near the other UI component imports:
 import { FilterSelect, type FilterSelectOption } from "@/app/components/ui/FilterSelect";
 ```
 
-- [ ] **Step 2: Replace the four filter controls**
+- [x] **Step 2: Replace the four filter controls**
 
 Replace the native filter controls for `type-filter`, `category-filter`, `status-filter`, and `date-period` with:
 
@@ -327,7 +327,7 @@ Replace the native filter controls for `type-filter`, `category-filter`, `status
             />
 ```
 
-- [ ] **Step 3: Verify non-goal selects remain untouched**
+- [x] **Step 3: Verify non-goal selects remain untouched**
 
 Run:
 
@@ -340,7 +340,7 @@ Expected:
 - No `<select>` remains for the four filter IDs.
 - Native `<select>` controls may still exist later in the cash entry form with IDs like `cas-type`, `cas-category`, and `cas-status`.
 
-- [ ] **Step 4: Run typecheck**
+- [x] **Step 4: Run typecheck**
 
 Run:
 
@@ -351,7 +351,7 @@ npm run typecheck
 
 Expected: PASS, or fail only on pre-existing unrelated errors. Fix any errors introduced by the migrated filter code before moving on.
 
-- [ ] **Step 5: Checkpoint**
+- [x] **Step 5: Checkpoint**
 
 Run:
 
@@ -367,7 +367,7 @@ Expected: diff shows imports and the four filter controls changed; form dropdown
 - Modify: `frontend/src/app/components/pages/StockMovementPage.tsx`
 - Test: `frontend/tests/ui/filter-select-standardization.test.mjs` in Task 5
 
-- [ ] **Step 1: Add the wrapper import**
+- [x] **Step 1: Add the wrapper import**
 
 Add this import near the other UI component imports:
 
@@ -375,7 +375,7 @@ Add this import near the other UI component imports:
 import { FilterSelect, type FilterSelectOption } from "@/app/components/ui/FilterSelect";
 ```
 
-- [ ] **Step 2: Replace the three filter controls**
+- [x] **Step 2: Replace the three filter controls**
 
 Replace the native filter controls for `type-filter`, `category-filter`, and `date-period` with:
 
@@ -424,7 +424,7 @@ Replace the native filter controls for `type-filter`, `category-filter`, and `da
             />
 ```
 
-- [ ] **Step 3: Verify non-goal selects remain untouched**
+- [x] **Step 3: Verify non-goal selects remain untouched**
 
 Run:
 
@@ -437,7 +437,7 @@ Expected:
 - No `<select>` remains for the three filter IDs.
 - Native `<select>` controls may still exist later in the stock movement form.
 
-- [ ] **Step 4: Run typecheck**
+- [x] **Step 4: Run typecheck**
 
 Run:
 
@@ -448,7 +448,7 @@ npm run typecheck
 
 Expected: PASS, or fail only on pre-existing unrelated errors. Fix any errors introduced by the migrated filter code before moving on.
 
-- [ ] **Step 5: Checkpoint**
+- [x] **Step 5: Checkpoint**
 
 Run:
 
@@ -463,7 +463,7 @@ Expected: diff shows imports and the three filter controls changed; form dropdow
 **Files:**
 - Create: `frontend/tests/ui/filter-select-standardization.test.mjs`
 
-- [ ] **Step 1: Create the test file**
+- [x] **Step 1: Create the test file**
 
 Create `frontend/tests/ui/filter-select-standardization.test.mjs` with this content:
 
@@ -529,7 +529,7 @@ test("stock movement page filters use FilterSelect instead of native selects", (
 });
 ```
 
-- [ ] **Step 2: Run the new test**
+- [x] **Step 2: Run the new test**
 
 Run:
 
@@ -540,7 +540,7 @@ node --experimental-strip-types --test --test-isolation=none tests/ui/filter-sel
 
 Expected: PASS.
 
-- [ ] **Step 3: Run the existing UI test slice**
+- [x] **Step 3: Run the existing UI test slice**
 
 Run:
 
@@ -551,7 +551,7 @@ node --experimental-strip-types --test --test-isolation=none tests/ui/*.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 4: Checkpoint**
+- [x] **Step 4: Checkpoint**
 
 Run:
 
@@ -566,7 +566,7 @@ Expected: diff shows only the new static UI regression test.
 **Files:**
 - Verify: all files changed by Tasks 1-5
 
-- [ ] **Step 1: Run frontend typecheck**
+- [x] **Step 1: Run frontend typecheck**
 
 Run:
 
@@ -577,7 +577,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 2: Run frontend lint**
+- [x] **Step 2: Run frontend lint**
 
 Run:
 
@@ -588,7 +588,7 @@ npm run lint
 
 Expected: PASS, or only pre-existing unrelated lint failures. Fix any lint failure introduced by this work.
 
-- [ ] **Step 3: Run the focused UI test**
+- [x] **Step 3: Run the focused UI test**
 
 Run:
 
@@ -599,7 +599,7 @@ node --experimental-strip-types --test --test-isolation=none tests/ui/filter-sel
 
 Expected: PASS.
 
-- [ ] **Step 4: Run the full static frontend test command if time allows**
+- [x] **Step 4: Run the full static frontend test command if time allows**
 
 Run:
 
@@ -610,7 +610,7 @@ node --experimental-strip-types --test --test-isolation=none tests/integration/*
 
 Expected: PASS. If this command is too broad or blocked by pre-existing failures, record the exact failing test names and keep the focused UI test result.
 
-- [ ] **Step 5: Inspect remaining native select usage**
+- [x] **Step 5: Inspect remaining native select usage**
 
 Run:
 
@@ -623,7 +623,7 @@ Expected:
 - Remaining `<select>` usages are only in forms/modals excluded by the spec.
 - No page-level filter native `<select>` remains in the three target pages.
 
-- [ ] **Step 6: Review the full diff**
+- [x] **Step 6: Review the full diff**
 
 Run:
 
