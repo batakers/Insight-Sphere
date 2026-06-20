@@ -21,6 +21,7 @@ export interface BackendProduct {
   category?: string | null;
   unit?: string | null;
   base_price: number;
+  default_price?: number | null;
   cost_price?: number | null;
   supplier?: string | null;
   is_active: boolean;
@@ -30,8 +31,8 @@ export interface BackendProduct {
 }
 
 export interface BackendInventoryItem {
-  id: string;           // inventory record ID (for stock movement)
-  product_id: string;   // product ID (for product CRUD)
+  id: string;           // inventory record ID
+  product_id: string;   // product ID
   store_nbr: number;
   current_stock: number;
   min_stock: number;
@@ -42,8 +43,9 @@ export interface BackendInventoryItem {
   version: number;
   created_at: string;
   updated_at: string;
+
   // Computed by service layer
-  status?: string | null;           // "SAFE" | "LOW" | "CRITICAL" | "OVERSTOCK" | "OUT_OF_STOCK"
+  status?: string | null;
   days_remaining?: number | null;
   product_name?: string | null;
   product_sku?: string | null;
@@ -80,6 +82,7 @@ export interface ProductCreateRequest {
   category: string;
   unit: string;
   base_price: number;
+  default_price: number;
   cost_price?: number;
   supplier?: string;
 }
@@ -90,9 +93,20 @@ export interface ProductUpdateRequest {
   category?: string;
   unit?: string;
   base_price?: number;
+  default_price?: number;
   cost_price?: number;
   supplier?: string;
   is_active?: boolean;
+}
+
+export interface InventoryCreateRequest {
+  product_id: string;
+  store_nbr: number;
+  current_stock: number;
+  min_stock: number;
+  max_stock: number;
+  reorder_point: number;
+  location?: string;
 }
 
 export interface StockMovementRequest {
@@ -109,7 +123,11 @@ export interface StockMovementRequest {
 
 export const fetchInventoryStock = (params?: { store_nbr?: number; limit?: number; skip?: number }) =>
   api<BackendInventoryItem[]>("/inventory/stock", {
-    query: toQuery({ store_nbr: params?.store_nbr, limit: params?.limit ?? 500, skip: params?.skip }),
+    query: toQuery({
+      store_nbr: params?.store_nbr,
+      limit: params?.limit ?? 500,
+      skip: params?.skip,
+    }),
   });
 
 export const fetchStockSummary = (store_nbr?: number) =>
@@ -121,16 +139,33 @@ export const fetchFilterOptions = () =>
   api<BackendFilterOptions>("/inventory/products/filters");
 
 export const createProduct = (data: ProductCreateRequest) =>
-  api<BackendProduct>("/inventory/products", { method: "POST", body: data });
+  api<BackendProduct>("/inventory/products", {
+    method: "POST",
+    body: data,
+  });
 
 export const updateProduct = (id: string, data: ProductUpdateRequest) =>
-  api<BackendProduct>(`/inventory/products/${id}`, { method: "PUT", body: data });
+  api<BackendProduct>(`/inventory/products/${id}`, {
+    method: "PUT",
+    body: data,
+  });
 
 export const softDeleteProduct = (id: string) =>
-  api<{ message: string }>(`/inventory/products/${id}`, { method: "DELETE" });
+  api<{ message: string }>(`/inventory/products/${id}`, {
+    method: "DELETE",
+  });
+
+export const createInventoryStock = (data: InventoryCreateRequest) =>
+  api<BackendInventoryItem>("/inventory/stock", {
+    method: "POST",
+    body: data,
+  });
 
 export const recordStockMovement = (data: StockMovementRequest) =>
   api<{ id: string; inventory_id: string; movement_type: string; quantity: number; created_at: string }>(
     "/inventory/stock/movement",
-    { method: "POST", body: data }
+    {
+      method: "POST",
+      body: data,
+    }
   );

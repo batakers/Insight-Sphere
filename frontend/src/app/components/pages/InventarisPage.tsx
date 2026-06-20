@@ -636,34 +636,77 @@ export function InventarisPage() {
       )}
 
       {/* Product Form Modal (Add / Edit) */}
-      {productFormOpen && (
-        <ProductForm
-          mode={productFormMode}
-          initialData={editingProduct ? {
-            name: editingProduct.name,
-            category: editingProduct.category,
-            price: editingProduct.price,
-            stock: editingProduct.stock,
-            unit: INVENTORY_UNITS[0],
-            minThreshold: editingProduct.minStock,
-            description: "",
-          } : undefined}
-          onClose={() => setProductFormOpen(false)}
-          onSubmit={async (data: ProductFormData) => {
-          if (isDemoDataEnabled()) { setProductFormOpen(false); toast.success(productFormMode === "add" ? t("inv.toast.added") : t("inv.toast.updated")); return; }
-          if (productFormMode === "add") {
-            await invClient.createProduct({ sku: data.sku, name: data.name, family: data.family, category: data.category, unit: data.unit, base_price: data.price, cost_price: data.price * 0.8, supplier: data.supplier || undefined });
-            toast.success(t("inv.toast.added"));
-          } else if (editingProduct) {
-            await invClient.updateProduct(editingProduct.id, { name: data.name, category: data.category, unit: data.unit, base_price: data.price, supplier: data.supplier || undefined });
-            toast.success(t("inv.toast.updated"));
-          }
-          const storeNbr = currentUser?.storeNbr ?? undefined;
-          invClient.fetchInventoryStock({ store_nbr: storeNbr, limit: 500 }).then(items => setApiProducts(items.map(mapBackendInventory)));
-          setProductFormOpen(false);
-        }}
-        />
-      )}
+{productFormOpen && (
+  <ProductForm
+    mode={productFormMode}
+    initialData={editingProduct ? {
+      name: editingProduct.name,
+      category: editingProduct.category,
+      price: editingProduct.price,
+      stock: editingProduct.stock,
+      unit: INVENTORY_UNITS[0],
+      minThreshold: editingProduct.minStock,
+      description: "",
+    } : undefined}
+    onClose={() => setProductFormOpen(false)}
+    onSubmit={async (data: ProductFormData) => {
+      if (isDemoDataEnabled()) {
+        setProductFormOpen(false);
+        toast.success(productFormMode === "add" ? t("inv.toast.added") : t("inv.toast.updated"));
+        return;
+      }
+
+      const storeNbr = currentUser?.storeNbr ?? 1;
+
+      if (productFormMode === "add") {
+        const createdProduct = await invClient.createProduct({
+          sku: data.sku,
+          name: data.name,
+          family: data.family,
+          category: data.category,
+          unit: data.unit,
+          base_price: data.price,
+          default_price: data.price,
+          cost_price: data.price * 0.8,
+          supplier: data.supplier || undefined,
+        });
+
+        await invClient.createInventoryStock({
+          product_id: createdProduct.id,
+          store_nbr: storeNbr,
+          current_stock: data.stock,
+          min_stock: data.minThreshold,
+          max_stock: data.stock * 3,
+          reorder_point: data.minThreshold,
+          location: "Gudang Utama",
+        });
+
+        toast.success(t("inv.toast.added"));
+      } else if (editingProduct) {
+        await invClient.updateProduct(editingProduct.id, {
+          name: data.name,
+          category: data.category,
+          unit: data.unit,
+          base_price: data.price,
+          default_price: data.price,
+          cost_price: data.price * 0.8,
+          supplier: data.supplier || undefined,
+        });
+
+        toast.success(t("inv.toast.updated"));
+      }
+
+      const [stockItems, summary] = await Promise.all([
+        invClient.fetchInventoryStock({ store_nbr: storeNbr, limit: 500 }),
+        invClient.fetchStockSummary(storeNbr),
+      ]);
+
+      setApiProducts(stockItems.map(mapBackendInventory));
+      setApiSummary(summary);
+      setProductFormOpen(false);
+    }}
+  />
+)}
 
       {/* Stock Update Modal */}
       {stockUpdateProduct && (
