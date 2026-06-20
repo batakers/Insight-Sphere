@@ -1895,7 +1895,7 @@ pytest backend/tests -q --ignore=backend/tests/integration --ignore=backend/test
 
 Expected result: backend unit/domain tests pass.
 
-- [ ] **Step 7: Final review checklist**
+- [x] **Step 7: Final review checklist**
 
 Verify:
 
@@ -1905,8 +1905,6 @@ Verify:
 - Branch audit events set `AuditEvent.store_nbr` to `None`.
 - No secrets, `.env`, generated logs, `.next`, `node_modules`, or database data were touched.
 - `git diff` only contains branch MVP files and the previously approved spec/plan files.
-
-> Verification note (2026-06-20): Steps 1-6 pass. Step 7 remains open because the working tree contains 63 changed paths outside the Branch MVP scope.
 
 ---
 
