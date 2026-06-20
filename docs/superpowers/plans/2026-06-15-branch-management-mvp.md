@@ -51,7 +51,7 @@ Do not commit in this repository unless the user explicitly asks. Treat every "C
 - Create: `backend/tests/domains/test_branches.py`
 - Depends on existing fixtures in `backend/tests/conftest.py`
 
-- [ ] **Step 1: Write the failing backend branch tests**
+- [x] **Step 1: Write the failing backend branch tests**
 
 Create `backend/tests/domains/test_branches.py` with this content:
 
@@ -251,7 +251,7 @@ def test_deactivate_and_reactivate_branch(admin_client):
     assert reactivated.json()["deleted_at"] is None
 ```
 
-- [ ] **Step 2: Run the failing branch tests**
+- [x] **Step 2: Run the failing branch tests**
 
 Run from repository root:
 
@@ -261,7 +261,7 @@ pytest backend/tests/domains/test_branches.py -q
 
 Expected result before implementation: FAIL during import or first request because `domains.branches` and `/branches` do not exist.
 
-- [ ] **Step 3: Checkpoint**
+- [x] **Step 3: Checkpoint**
 
 Review the failing assertions and keep the test file. Do not commit unless the user explicitly asks.
 
@@ -274,7 +274,7 @@ Review the failing assertions and keep the test file. Do not commit unless the u
 - Create: `backend/domains/branches/models.py`
 - Create: `backend/domains/branches/schemas.py`
 
-- [ ] **Step 1: Create package marker**
+- [x] **Step 1: Create package marker**
 
 Create `backend/domains/branches/__init__.py`:
 
@@ -282,7 +282,7 @@ Create `backend/domains/branches/__init__.py`:
 """Operational branch master domain."""
 ```
 
-- [ ] **Step 2: Create the SQLAlchemy model**
+- [x] **Step 2: Create the SQLAlchemy model**
 
 Create `backend/domains/branches/models.py`:
 
@@ -320,7 +320,7 @@ class Branch(AbstractBase):
     )
 ```
 
-- [ ] **Step 3: Create Pydantic schemas**
+- [x] **Step 3: Create Pydantic schemas**
 
 Create `backend/domains/branches/schemas.py`:
 
@@ -440,7 +440,7 @@ class BranchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 ```
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run:
 
@@ -450,7 +450,7 @@ pytest backend/tests/domains/test_branches.py -q
 
 Expected result: still FAIL because repository, service, router, migration registration, and app registration are not implemented.
 
-- [ ] **Step 5: Checkpoint**
+- [x] **Step 5: Checkpoint**
 
 Review that model and schema names match the tests and spec. Do not commit unless the user explicitly asks.
 
@@ -465,7 +465,7 @@ Review that model and schema names match the tests and spec. Do not commit unles
 - Modify: `backend/main.py`
 - Test: `backend/tests/domains/test_branches.py`
 
-- [ ] **Step 1: Create repository helpers**
+- [x] **Step 1: Create repository helpers**
 
 Create `backend/domains/branches/repository.py`:
 
@@ -531,7 +531,7 @@ def list_branches(
     )
 ```
 
-- [ ] **Step 2: Create service business rules**
+- [x] **Step 2: Create service business rules**
 
 Create `backend/domains/branches/service.py`:
 
@@ -774,7 +774,7 @@ def deactivate_branch(db: Session, branch_id: UUID, actor: User) -> Branch:
     return branch
 ```
 
-- [ ] **Step 3: Create FastAPI router**
+- [x] **Step 3: Create FastAPI router**
 
 Create `backend/domains/branches/router.py`:
 
@@ -877,7 +877,7 @@ def deactivate_branch(
         _raise_service_error(exc)
 ```
 
-- [ ] **Step 4: Register model and router in `backend/main.py`**
+- [x] **Step 4: Register model and router in `backend/main.py`**
 
 Modify the domain model imports near the existing imports:
 
@@ -897,7 +897,7 @@ Register the router after `dataset_router` or near other domain routers:
 app.include_router(branches_router)
 ```
 
-- [ ] **Step 5: Run the focused backend tests**
+- [x] **Step 5: Run the focused backend tests**
 
 Run:
 
@@ -907,7 +907,7 @@ pytest backend/tests/domains/test_branches.py -q
 
 Expected result after this task: PASS for branch tests in SQLite.
 
-- [ ] **Step 6: Run auth hardening smoke test**
+- [x] **Step 6: Run auth hardening smoke test**
 
 Run:
 
@@ -917,7 +917,7 @@ pytest backend/tests/test_p0_config_hardening.py
 
 Expected result: PASS.
 
-- [ ] **Step 7: Checkpoint**
+- [x] **Step 7: Checkpoint**
 
 Review new branch domain boundaries and `backend/main.py` registration. Do not commit unless the user explicitly asks.
 
@@ -929,7 +929,7 @@ Review new branch domain boundaries and `backend/main.py` registration. Do not c
 - Create: `backend/alembic/versions/e5f6a7b8c9d0_create_operational_branches.py`
 - Test: `backend/tests/test_p2_logging_and_migrations.py`
 
-- [ ] **Step 1: Create migration file**
+- [x] **Step 1: Create migration file**
 
 Create `backend/alembic/versions/e5f6a7b8c9d0_create_operational_branches.py`:
 
@@ -997,7 +997,7 @@ def downgrade() -> None:
     op.drop_table("branches")
 ```
 
-- [ ] **Step 2: Run migration chain checks**
+- [x] **Step 2: Run migration chain checks**
 
 Run:
 
@@ -1007,7 +1007,7 @@ pytest backend/tests/test_p2_logging_and_migrations.py -q
 
 Expected result: PASS. The new revision must keep a single linear Alembic chain and must not contain `DELETE FROM`.
 
-- [ ] **Step 3: Apply migration locally when using real PostgreSQL**
+- [x] **Step 3: Apply migration locally when using real PostgreSQL**
 
 If the local PostgreSQL database is running and configured, run:
 
@@ -1018,7 +1018,7 @@ alembic upgrade head
 
 Expected result: Alembic applies through `e5f6a7b8c9d0`.
 
-- [ ] **Step 4: Checkpoint**
+- [x] **Step 4: Checkpoint**
 
 Review that migration creates only the new `branches` table and does not alter `stores`, `transactions`, `inventory`, or production-like data. Do not commit unless the user explicitly asks.
 
@@ -1031,7 +1031,7 @@ Review that migration creates only the new `branches` table and does not alter `
 - Create: `frontend/src/app/lib/branch-client.ts`
 - Create: `frontend/tests/branch-client.test.mjs`
 
-- [ ] **Step 1: Add static tests for the branch client and structured error support**
+- [x] **Step 1: Add static tests for the branch client and structured error support**
 
 Create `frontend/tests/branch-client.test.mjs`:
 
@@ -1069,7 +1069,7 @@ test("api client normalizes object detail messages", () => {
 });
 ```
 
-- [ ] **Step 2: Run failing frontend API tests**
+- [x] **Step 2: Run failing frontend API tests**
 
 Run:
 
@@ -1080,7 +1080,7 @@ node --experimental-strip-types --test --test-isolation=none tests/branch-client
 
 Expected result before implementation: FAIL because `branch-client.ts` does not exist and `api.ts` does not normalize object details.
 
-- [ ] **Step 3: Update API error body typing**
+- [x] **Step 3: Update API error body typing**
 
 Modify `frontend/src/app/lib/api.ts`. Replace the `BackendErrorBody` interface and update `normalizeErrorMessage` so object detail bodies are handled:
 
@@ -1118,7 +1118,7 @@ function normalizeErrorMessage(body: BackendErrorBody | undefined, fallback: str
 }
 ```
 
-- [ ] **Step 4: Create the branch client**
+- [x] **Step 4: Create the branch client**
 
 Create `frontend/src/app/lib/branch-client.ts`:
 
@@ -1195,7 +1195,7 @@ export const deactivateBranch = (id: string) =>
   api<BranchResponse>(`/branches/${id}`, { method: "DELETE" });
 ```
 
-- [ ] **Step 5: Run branch client tests**
+- [x] **Step 5: Run branch client tests**
 
 Run:
 
@@ -1206,7 +1206,7 @@ node --experimental-strip-types --test --test-isolation=none tests/branch-client
 
 Expected result: PASS.
 
-- [ ] **Step 6: Checkpoint**
+- [x] **Step 6: Checkpoint**
 
 Review `api.ts` change for backward compatibility with existing string and Pydantic error bodies. Do not commit unless the user explicitly asks.
 
@@ -1222,7 +1222,7 @@ Review `api.ts` change for backward compatibility with existing string and Pydan
   - `frontend/src/app/components/settings/BranchDeactivateDialog.tsx`
   - `frontend/src/app/i18n.tsx`
 
-- [ ] **Step 1: Add static UI/accessibility tests**
+- [x] **Step 1: Add static UI/accessibility tests**
 
 Create `frontend/tests/ui/branch-management-panel.test.mjs`:
 
@@ -1306,7 +1306,7 @@ test("Branch management i18n keys exist in ID and EN dictionaries", () => {
 });
 ```
 
-- [ ] **Step 2: Run failing UI tests**
+- [x] **Step 2: Run failing UI tests**
 
 Run:
 
@@ -1317,7 +1317,7 @@ node --experimental-strip-types --test --test-isolation=none tests/ui/branch-man
 
 Expected result before UI implementation: FAIL because modal files do not exist and the panel is still static.
 
-- [ ] **Step 3: Checkpoint**
+- [x] **Step 3: Checkpoint**
 
 Review static tests for scope and wording. Do not commit unless the user explicitly asks.
 
@@ -1332,7 +1332,7 @@ Review static tests for scope and wording. Do not commit unless the user explici
 - Modify: `frontend/src/app/i18n.tsx`
 - Test: `frontend/tests/ui/branch-management-panel.test.mjs`
 
-- [ ] **Step 1: Create `BranchFormModal.tsx`**
+- [x] **Step 1: Create `BranchFormModal.tsx`**
 
 Create `frontend/src/app/components/settings/BranchFormModal.tsx` with this structure:
 
@@ -1542,7 +1542,7 @@ export function BranchFormModal({ isOpen, branch, isSubmitting, error, t, onClos
 }
 ```
 
-- [ ] **Step 2: Create `BranchDeactivateDialog.tsx`**
+- [x] **Step 2: Create `BranchDeactivateDialog.tsx`**
 
 Create `frontend/src/app/components/settings/BranchDeactivateDialog.tsx`:
 
@@ -1617,7 +1617,7 @@ export function BranchDeactivateDialog({ branch, isSubmitting, error, t, onCance
 }
 ```
 
-- [ ] **Step 3: Replace static store settings panel with branch management panel**
+- [x] **Step 3: Replace static store settings panel with branch management panel**
 
 Modify `frontend/src/app/components/settings/StoreSettingsPanel.tsx`.
 
@@ -1748,7 +1748,7 @@ import { BranchDeactivateDialog } from "@/app/components/settings/BranchDeactiva
 import { BranchFormModal } from "@/app/components/settings/BranchFormModal";
 ```
 
-- [ ] **Step 4: Add i18n keys**
+- [x] **Step 4: Add i18n keys**
 
 Modify `frontend/src/app/i18n.tsx` in both Indonesian and English dictionaries. Add these exact keys with localized values:
 
@@ -1798,7 +1798,7 @@ Modify `frontend/src/app/i18n.tsx` in both Indonesian and English dictionaries. 
 
 Use English equivalents for the EN dictionary with the same keys.
 
-- [ ] **Step 5: Run UI static tests**
+- [x] **Step 5: Run UI static tests**
 
 Run:
 
@@ -1809,7 +1809,7 @@ node --experimental-strip-types --test --test-isolation=none tests/ui/branch-man
 
 Expected result: PASS.
 
-- [ ] **Step 6: Run branch client tests**
+- [x] **Step 6: Run branch client tests**
 
 Run:
 
@@ -1820,7 +1820,7 @@ node --experimental-strip-types --test --test-isolation=none tests/branch-client
 
 Expected result: PASS.
 
-- [ ] **Step 7: Checkpoint**
+- [x] **Step 7: Checkpoint**
 
 Review `StoreSettingsPanel.tsx` in browser at `http://127.0.0.1:3000/pengaturan` if the dev server is running. Check desktop and mobile widths manually. Do not commit unless the user explicitly asks.
 
@@ -1831,7 +1831,7 @@ Review `StoreSettingsPanel.tsx` in browser at `http://127.0.0.1:3000/pengaturan`
 **Files:**
 - Verify all files touched by Tasks 1-7.
 
-- [ ] **Step 1: Run focused backend tests**
+- [x] **Step 1: Run focused backend tests**
 
 Run:
 
@@ -1841,7 +1841,7 @@ pytest backend/tests/domains/test_branches.py -q
 
 Expected result: all tests pass.
 
-- [ ] **Step 2: Run backend hardening and migration tests**
+- [x] **Step 2: Run backend hardening and migration tests**
 
 Run:
 
@@ -1851,7 +1851,7 @@ pytest backend/tests/test_p0_config_hardening.py backend/tests/test_p2_logging_a
 
 Expected result: all tests pass.
 
-- [ ] **Step 3: Run frontend branch tests**
+- [x] **Step 3: Run frontend branch tests**
 
 Run:
 
@@ -1862,7 +1862,7 @@ node --experimental-strip-types --test --test-isolation=none tests/branch-client
 
 Expected result: all tests pass.
 
-- [ ] **Step 4: Run frontend baseline checks**
+- [x] **Step 4: Run frontend baseline checks**
 
 Run:
 
@@ -1874,7 +1874,7 @@ npm run typecheck
 
 Expected result: lint has no errors, typecheck passes.
 
-- [ ] **Step 5: Run broader frontend static suite if time allows**
+- [x] **Step 5: Run broader frontend static suite if time allows**
 
 Run:
 
@@ -1885,7 +1885,7 @@ node --experimental-strip-types --test --test-isolation=none tests/integration/*
 
 Expected result: all frontend static tests pass.
 
-- [ ] **Step 6: Run backend unit/domain suite if time allows**
+- [x] **Step 6: Run backend unit/domain suite if time allows**
 
 Run:
 
@@ -1905,6 +1905,8 @@ Verify:
 - Branch audit events set `AuditEvent.store_nbr` to `None`.
 - No secrets, `.env`, generated logs, `.next`, `node_modules`, or database data were touched.
 - `git diff` only contains branch MVP files and the previously approved spec/plan files.
+
+> Verification note (2026-06-20): Steps 1-6 pass. Step 7 remains open because the working tree contains 63 changed paths outside the Branch MVP scope.
 
 ---
 
