@@ -1,7 +1,10 @@
 import logging
 import os
+from typing import cast
+
+from celery import Task
 from sqlalchemy import text
-from fastapi import FastAPI, Depends, BackgroundTasks
+from fastapi import FastAPI, Depends, BackgroundTasks, Request, Response
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -22,7 +25,7 @@ from domains.branches import models as _branches
 # 1. Konfigurasi Sistem Logging
 is_vercel = os.getenv("VERCEL") == "1"
 
-handlers = [logging.StreamHandler()]
+handlers: list[logging.Handler] = [logging.StreamHandler()]
 if not is_vercel:
     try:
         # 5 MB rotation, 5 backup → ~25 MB ceiling untuk system_api.log* sebelum overwrite.
@@ -63,7 +66,7 @@ def trigger_ml_batch_task():
         return
     try:
         # Mengirimkan pekerjaan ke Redis queue (Non-blocking)
-        ml_daily_batch_task.delay()
+        cast(Task, ml_daily_batch_task).delay()
         logger.info("[Scheduler] ML Batch Task has been queued to Celery.")
     except Exception as e:
         logger.error(f"[Scheduler Error] Failed to queue ML task: {e}")
@@ -170,7 +173,15 @@ app.include_router(dashboard_router)
 app.include_router(branches_router)
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def rate_limit_exceeded_handler(request: Request, exc: Exception) -> Response:
+    if not isinstance(exc, RateLimitExceeded):
+        raise exc
+    return _rate_limit_exceeded_handler(request, exc)
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(MirrorReadOnlyMiddleware)
 
@@ -186,7 +197,6 @@ def run_daily_batch(background_tasks: BackgroundTasks):
     """
     background_tasks.add_task(ml_daily_batch_task)
     return {"status": "Batch ML process started in background via API Trigger"}
-from fastapi import Request
 from fastapi.responses import JSONResponse
 import traceback
 

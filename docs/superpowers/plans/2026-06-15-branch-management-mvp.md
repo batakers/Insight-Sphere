@@ -937,7 +937,7 @@ Create `backend/alembic/versions/e5f6a7b8c9d0_create_operational_branches.py`:
 """Create operational branches table
 
 Revision ID: e5f6a7b8c9d0
-Revises: d4e5f6a7b8c9
+Revises: c3d4e5f6a7b8
 Create Date: 2026-06-15 00:00:00.000000
 """
 
@@ -949,7 +949,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = "e5f6a7b8c9d0"
-down_revision: Union[str, Sequence[str], None] = "d4e5f6a7b8c9"
+down_revision: Union[str, Sequence[str], None] = "c3d4e5f6a7b8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
