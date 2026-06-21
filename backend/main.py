@@ -198,11 +198,17 @@ def run_daily_batch(background_tasks: BackgroundTasks):
     background_tasks.add_task(ml_daily_batch_task)
     return {"status": "Batch ML process started in background via API Trigger"}
 from fastapi.responses import JSONResponse
-import traceback
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        "Unhandled exception while processing %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     return JSONResponse(
         status_code=500,
-        content={'detail': str(exc), 'traceback': traceback.format_exc()}
+        content={"detail": "Internal server error"},
     )

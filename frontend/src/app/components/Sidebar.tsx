@@ -89,7 +89,7 @@ export function Sidebar() {
             )}
           >
             {!collapsed && (
-              <p className={cn(T.label, "px-3 pt-1 pb-2 text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500")}>
+              <p className={cn(T.label, "px-3 pt-1 pb-2 uppercase tracking-widest text-slate-400 dark:text-slate-500")}>
                 {t(`nav.group.${group}`)}
               </p>
             )}

@@ -1,28 +1,24 @@
-# Gunakan image Python ringan sebagai base image (Production Ready)
-FROM python:3.10-slim
+FROM python:3.12-slim
 
-# Mencegah Python membuat file `.pyc`
 ENV PYTHONDONTWRITEBYTECODE=1
-
-# Log / stream standar output Python tidak di-*buffer*, langsung di-output
 ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
 
-# Set the working directory directly in the container
 WORKDIR /app
 
-# Salin dependencies list
+# libgomp1 diperlukan oleh LightGBM / XGBoost yang dipakai di intelligence domain
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 
-# Instal dependensi backend (Pastikan pydantic-settings sudah ditambahkan di file tersebut)
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir pydantic-settings psycopg2-binary
+RUN python -m pip install --upgrade pip \
+    && pip install -r requirements.txt
 
-# Salin seluruh struktur aplikasi *backend*
 COPY . .
 
-# Expose port yang digunakan FastAPI
 EXPOSE 8000
 
-# Jalankan server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render mengatur PORT secara otomatis; fallback ke 8000 untuk local docker run
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

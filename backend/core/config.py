@@ -9,7 +9,7 @@ from core.runtime_constants import (
     RESET_TOKEN_EXPIRE_HOURS as DEFAULT_RESET_TOKEN_EXPIRE_HOURS,
 )
 
-PRODUCTION_ENV_VALUES = {"prod", "production"}
+PRODUCTION_ENV_VALUES = {"prod", "production", "staging"}
 PRODUCTION_SECRET_KEY_MIN_LENGTH = 32
 
 DEV_DATABASE_URL = "postgresql://postgres:root@localhost:5433/pos_cerdas_db"

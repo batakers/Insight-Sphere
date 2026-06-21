@@ -154,13 +154,8 @@ interface MirrorModeWatermarkProps {
 
 function MirrorModeWatermark({ roleLabel }: MirrorModeWatermarkProps) {
   const { t } = useTranslation();
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <div

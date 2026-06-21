@@ -18,9 +18,44 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _bootstrap_empty_database_if_needed() -> bool:
+    """Return True and create all tables if the database is completely empty.
+
+    On a fresh PostgreSQL database there are no application tables, so we
+    skip the legacy pre-cleanup ALTER/DROP steps and create the full schema
+    in one shot via SQLAlchemy metadata.  Existing databases (pre-Alembic)
+    still have their tables and will take the legacy path below.
+    """
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    application_tables = set(inspector.get_table_names()) - {"alembic_version"}
+    if application_tables:
+        return False
+
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+
+    from core.database import Base
+    import domains.dataset.models  # noqa: F401
+    import domains.observability.models  # noqa: F401
+    import domains.identity.models  # noqa: F401
+    import domains.sales.models  # noqa: F401
+    import domains.finance.models  # noqa: F401
+    import domains.intelligence.models  # noqa: F401
+    import domains.inventory.models  # noqa: F401
+    import domains.notification.models  # noqa: F401
+    import domains.reporting.models  # noqa: F401
+    import domains.branches.models  # noqa: F401
+
+    Base.metadata.create_all(bind=bind)
+    return True
+
+
 def upgrade() -> None:
     """Upgrade schema."""
-    
+    # Fresh-empty database: create all tables in one shot and skip legacy cleanup.
+    if _bootstrap_empty_database_if_needed():
+        return
+
     # --- 1. PRE-CLEANUP: Hapus constraint yang menghalangi dropping/altering ---
     op.execute("ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_branch_id_fkey")
     op.execute("ALTER TABLE ai_prediction_logs DROP CONSTRAINT IF EXISTS ai_prediction_logs_store_nbr_fkey")

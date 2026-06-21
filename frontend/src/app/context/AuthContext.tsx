@@ -17,7 +17,6 @@
 import React, {
   createContext,
   useContext,
-  useState,
   useEffect,
   useCallback,
   type ReactNode,
@@ -106,7 +105,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "/";
   const queryClient = useQueryClient();
   const { t } = useTranslation();
-  const [viewingAsRole, setViewingAsRole] = useState<UserRole | null>(null);
   const shouldHydrateSession = shouldHydrateAuth(pathname);
 
   // Hydrate session from cookie on mount (dan di-share ke component lain
@@ -149,20 +147,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refetchOnWindowFocus: true,
   });
 
-  useEffect(() => {
-    if (!user || user.role !== ROLE_CODES.admin) {
-      setViewingAsRole(null);
-      return;
-    }
-    setViewingAsRole(mirrorSession?.target_role && isRoleCode(mirrorSession.target_role) ? mirrorSession.target_role : null);
-  }, [mirrorSession, user]);
-
   // Listen global 401 dari `api` client (data endpoint) → otomatis logout.
   useEffect(() => {
     const handleUnauthorized = () => {
       queryClient.setQueryData(["auth", "me"], null);
       queryClient.clear();
-      setViewingAsRole(null);
       if (
         typeof window !== "undefined" &&
         shouldHandleUnauthorizedRedirect(window.location.pathname)
@@ -205,7 +194,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Full success — sync query cache dari response payload
         // (hemat round-trip ke /auth/me).
         queryClient.setQueryData(["auth", "me"], result.user);
-        setViewingAsRole(null);
         return { kind: "success" };
       } catch (err) {
         const message =
@@ -226,7 +214,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     queryClient.setQueryData(["auth", "me"], null);
     queryClient.clear();
-    setViewingAsRole(null);
     router.push("/login/select");
   }, [queryClient, router]);
 
@@ -238,12 +225,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           if (newRole === ROLE_CODES.admin) {
             await authClient.stopMirrorSession();
-            setViewingAsRole(null);
             queryClient.setQueryData(["auth", "mirror"], null);
             return;
           }
           const session = await authClient.startMirrorSession(newRole);
-          setViewingAsRole(session.target_role);
           queryClient.setQueryData(["auth", "mirror"], session);
         } catch (err) {
           const message = err instanceof ApiError ? err.message : t("common.error");
@@ -260,8 +245,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Derived state
   // ============================================================
 
+  const mirroredRole: UserRole | null =
+    user?.role === ROLE_CODES.admin &&
+    mirrorSession?.target_role &&
+    isRoleCode(mirrorSession.target_role)
+      ? mirrorSession.target_role
+      : null;
+
   const effectiveRole: UserRole =
-    viewingAsRole || user?.role || ROLE_CODES.cashier;
+    mirroredRole || user?.role || ROLE_CODES.cashier;
 
   const value: AuthContextType = {
     user,

@@ -27,6 +27,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5433/postgres
       INTEGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/postgres
       INTEGRATION_DATABASE_NAME: insightsphere_test_pytest
+      INTEGRATION_ALEMBIC_DATABASE_NAME: insightsphere_test_alembic
       RATE_LIMIT_ENABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -56,9 +57,18 @@ jobs:
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
       - name: Typecheck
         working-directory: frontend
         run: npm run typecheck
       - name: Static + UI audit tests (node:test)
         working-directory: frontend
         run: node --experimental-strip-types --test --test-isolation=none tests/integration/*.test.mjs tests/ui/*.test.mjs tests/*.test.mjs
+      - name: Production build
+        working-directory: frontend
+        env:
+          BACKEND_INTERNAL_URL: https://insightsphere-api-staging.onrender.com
+          NEXT_PUBLIC_API_URL: https://insightsphere-api-staging.onrender.com
+        run: npm run build

@@ -25,6 +25,7 @@ from domains.intelligence import models as _intelligence
 from domains.inventory import models as _inventory
 from domains.notification import models as _notification
 from domains.reporting import models as _reporting
+from domains.branches import models as _branches
 
 # 4. Set target metadata
 target_metadata = Base.metadata

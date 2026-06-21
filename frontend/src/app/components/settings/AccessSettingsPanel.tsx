@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Info, Loader2, Shield, UserPlus, Users, XCircle } from "lucide-react";
 import { ResponsiveTable } from "@/app/components/ui/ResponsiveTable";
 import { cn } from "@/app/lib/utils";
@@ -30,27 +31,28 @@ export function AccessSettingsPanel({ t }: SettingsPanelProps) {
   const { user } = useAuth();
   const canManageUsers = user?.role === "admin" || user?.role === "owner";
 
-  const [usersData, setUsersData] = useState<BackendUserListItem[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
-  const [usersError, setUsersError] = useState("");
+  const {
+    data: usersData = [],
+    isLoading: usersLoading,
+    isError: usersLoadFailed,
+  } = useQuery<BackendUserListItem[]>({
+    queryKey: ["settings", "access", "users"],
+    queryFn: () => authClient.fetchUsers({ limit: 50 }),
+    enabled: canManageUsers,
+    retry: false,
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    if (!canManageUsers) return;
-    setUsersLoading(true);
-    authClient.fetchUsers({ limit: 50 })
-      .then(data => { setUsersData(data); setUsersError(""); })
-      .catch(() => setUsersError(t("common.error_loading")))
-      .finally(() => setUsersLoading(false));
-  }, [canManageUsers, t]);
+  const usersError = usersLoadFailed ? t("common.error_loading") : "";
 
-  const members = usersData.map(u => ({
+  const members = useMemo(() => usersData.map(u => ({
     id: u.id,
     name: u.full_name || u.username,
     email: u.email ?? u.username,
     role: t(ROLE_LABEL_KEY[u.role] ?? u.role),
     active: u.is_active ?? true,
     lastActive: "-",
-  }));
+  })), [t, usersData]);
 
   const permissions = [
     { feature: t("set.access.feature.dashboard"), admin: true, owner: true, cashier: true },

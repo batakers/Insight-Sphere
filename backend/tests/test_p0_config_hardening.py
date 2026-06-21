@@ -90,3 +90,16 @@ def test_production_config_rejects_short_secret_key(monkeypatch: pytest.MonkeyPa
 
     message = str(exc_info.value)
     assert "SECRET_KEY too short" in message
+
+
+def test_staging_config_requires_runtime_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_runtime_env(monkeypatch)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(APP_ENV="staging", _env_file=None)
+
+    message = str(exc_info.value)
+    assert "DATABASE_URL" in message
+    assert "SECRET_KEY" in message
+    assert "REDIS_URL" in message
+    assert "FRONTEND_URL" in message
