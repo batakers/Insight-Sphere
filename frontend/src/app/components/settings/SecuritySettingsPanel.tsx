@@ -101,6 +101,7 @@ export function SecuritySettingsPanel({ t }: SettingsPanelProps) {
   }, [t]);
 
   const parsedLogs = loginHistory.map(item => ({
+    id: item.id,
     date: new Date(item.timestamp).toLocaleString("id-ID", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
     device: item.user_agent ?? "Unknown Device",
     ip: item.ip_address ?? "-",
@@ -615,7 +616,7 @@ export function SecuritySettingsPanel({ t }: SettingsPanelProps) {
             </thead>
             <tbody className={TABLE.body}>
               {visibleLogs.map((log) => (
-                <tr key={`${log.date}-${log.ip}`} className={cn(TABLE.row, TABLE.rowHover, "group", !log.success && "bg-rose-50/30 dark:bg-rose-900/10")}>
+                <tr key={log.id} className={cn(TABLE.row, TABLE.rowHover, "group", !log.success && "bg-rose-50/30 dark:bg-rose-900/10")}>
                   <td className={cn(
                     TABLE.cell,
                     TABLE.stickyColumn,

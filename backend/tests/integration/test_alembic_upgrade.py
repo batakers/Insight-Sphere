@@ -27,7 +27,9 @@ TEST_DB_NAME = os.environ.get(
 
 def _replace_database(url: str, db_name: str) -> str:
     parsed = sqlalchemy.engine.url.make_url(url)
-    return str(parsed.set(database=db_name))
+    # NB: str(URL) masks the password as "***" in SQLAlchemy 1.4+, which would
+    # break the alembic subprocess auth. render_as_string keeps the real password.
+    return parsed.set(database=db_name).render_as_string(hide_password=False)
 
 
 def _admin_engine() -> Engine:

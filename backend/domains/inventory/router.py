@@ -138,7 +138,12 @@ def record_stock_movement(
     payload: dict = Depends(get_current_user_payload)
 ):
     """Catat pergerakan stok (IN/OUT/ADJUSTMENT/WASTE) + auto-update current_stock."""
-    require_store_access(movement.store_nbr, payload)
+    # store_nbr tidak ada di payload movement — resolve dari inventory row dulu
+    # sebelum cek akses cabang (sebelumnya membaca movement.store_nbr → AttributeError 500).
+    inventory = inv_repo.get_inventory_by_id(db, str(movement.inventory_id))
+    if not inventory:
+        raise HTTPException(status_code=404, detail="Inventory record not found.")
+    require_store_access(inventory.store_nbr, payload)
     try:
         return inv_service.record_stock_movement(db, movement)
     except ValueError as e:
